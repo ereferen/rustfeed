@@ -1,0 +1,52 @@
+name: Deploy Rust Documentation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# GitHub Pagesへのデプロイ権限
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時デプロイを防止
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Build documentation
+        run: |
+          cargo doc --no-deps --document-private-items
+          # index.html がないとGitHub Pagesで404になるため、リダイレクトを作成
+          echo '<meta http-equiv="refresh" content="0; url=rustfeed/index.html">' > target/doc/index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/doc
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
