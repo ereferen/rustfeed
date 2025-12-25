@@ -1,26 +1,98 @@
+//! # CLIコマンド実装モジュール
+//!
+//! このモジュールは、rustfeed の各サブコマンドの実装を提供します。
+//!
+//! ## 提供する関数
+//!
+//! | 関数 | 対応コマンド | 説明 |
+//! |------|-------------|------|
+//! | [`add_feed`] | `rustfeed add` | フィード追加 |
+//! | [`remove_feed`] | `rustfeed remove` | フィード削除 |
+//! | [`list_feeds`] | `rustfeed list` | フィード一覧 |
+//! | [`fetch_feeds`] | `rustfeed fetch` | 記事取得 |
+//! | [`show_articles`] | `rustfeed articles` | 記事一覧 |
+//! | [`mark_as_read`] | `rustfeed read` | 既読マーク |
+//!
+//! ## 設計方針
+//!
+//! - 各関数は `Database` への参照を受け取る（依存性注入）
+//! - 標準出力にカラー付きのメッセージを表示
+//! - エラーは `Result` で返し、呼び出し元に処理を委ねる
+
 use anyhow::{Context, Result};
 use colored::Colorize;
 
 use crate::db::Database;
 use crate::feed;
 
-/// Add a new RSS feed
+// =============================================================================
+// フィード管理コマンド
+// =============================================================================
+
+/// 新しいRSSフィードを追加する
+///
+/// # 処理の流れ
+///
+/// 1. URLからフィードを取得・パース
+/// 2. カスタム名があれば適用
+/// 3. データベースに保存
+/// 4. 成功メッセージを表示
+///
+/// # 引数
+///
+/// * `db` - データベース接続への参照
+/// * `url` - 追加するフィードのURL
+/// * `name` - カスタム名（省略可能）
+///
+/// # `Option<&str>` について
+///
+/// `Option<&str>` は「文字列スライスへの参照があるかもしれない」を表します。
+/// - `Some("name")` - 名前が指定された
+/// - `None` - 名前は指定されていない
+///
+/// `&str` は `String` への参照で、所有権を持ちません。
+/// これにより、呼び出し元の文字列を借用するだけで済みます。
+///
+/// # 例
+///
+/// ```rust,no_run
+/// # use rustfeed::db::Database;
+/// # use rustfeed::commands::add_feed;
+/// # async fn example() -> anyhow::Result<()> {
+/// # let db = Database::new()?;
+/// // カスタム名なし
+/// add_feed(&db, "https://example.com/feed.xml", None).await?;
+///
+/// // カスタム名あり
+/// add_feed(&db, "https://example.com/feed.xml", Some("My Feed")).await?;
+/// # Ok(())
+/// # }
+/// ```
 pub async fn add_feed(db: &Database, url: &str, name: Option<&str>) -> Result<()> {
+    // 取得中メッセージを表示
+    // `Colorize` トレイトにより、文字列に `.blue()` などのメソッドが追加される
     println!("{} {}", "Fetching feed:".blue(), url);
 
-    // Fetch and parse the feed
+    // フィードを取得してパース
+    // `_articles` のアンダースコアプレフィックスは「未使用変数」を示す
+    // コンパイラの警告を抑制するためのRustの慣習
     let (mut feed_info, _articles) = feed::fetch_feed(url)
         .await
         .with_context(|| format!("Failed to fetch feed from {}", url))?;
 
-    // Use custom name if provided
+    // カスタム名が指定されていれば上書き
+    // `if let Some(...)` は Option から値を取り出すイディオム
     if let Some(custom_name) = name {
+        // `to_string()` で &str から String を作成
         feed_info.title = custom_name.to_string();
     }
 
-    // Save to database
+    // データベースに保存
     let id = db.add_feed(&feed_info)?;
 
+    // 成功メッセージを表示
+    // `format!()` は文字列をフォーマットする（printlnの返り値版）
+    // `.bold()`, `.green()` は colored クレートの機能
     println!(
         "{} {} (ID: {})",
         "Added feed:".green(),
@@ -31,37 +103,74 @@ pub async fn add_feed(db: &Database, url: &str, name: Option<&str>) -> Result<()
     Ok(())
 }
 
-/// Remove an RSS feed
+/// RSSフィードを削除する
+///
+/// # 引数
+///
+/// * `db` - データベース接続への参照
+/// * `id` - 削除するフィードのID
+///
+/// # 注意
+///
+/// フィードを削除すると、関連する全ての記事も削除されます
+/// （ON DELETE CASCADE）。
 pub fn remove_feed(db: &Database, id: i64) -> Result<()> {
+    // `remove_feed` は削除成功時に true を返す
     if db.remove_feed(id)? {
         println!("{} {}", "Removed feed with ID:".green(), id);
     } else {
+        // `.yellow()` で警告色
         println!("{} {}", "Feed not found with ID:".yellow(), id);
     }
     Ok(())
 }
 
-/// List all registered feeds
+/// 登録済みの全フィードを一覧表示する
+///
+/// # 出力フォーマット
+///
+/// ```text
+/// Registered Feeds:
+///
+///   [1] Feed Title (https://example.com/feed.xml)
+///       Description text...
+/// ```
+///
+/// # 空の場合
+///
+/// フィードが登録されていない場合は、使い方のヒントを表示します。
 pub fn list_feeds(db: &Database) -> Result<()> {
+    // データベースから全フィードを取得
     let feeds = db.get_feeds()?;
 
+    // フィードが空の場合
     if feeds.is_empty() {
         println!("{}", "No feeds registered yet.".yellow());
         println!("Use 'rustfeed add <url>' to add a feed.");
-        return Ok(());
+        return Ok(()); // 早期リターン
     }
 
+    // ヘッダー表示
+    // `.underline()` で下線付き
     println!("{}", "Registered Feeds:".bold().underline());
-    println!();
+    println!(); // 空行
 
+    // 各フィードを表示
+    // `for ... in` はイテレータをループ処理
     for feed in feeds {
+        // フォーマット文字列で整形
         println!(
             "  {} {} {}",
-            format!("[{}]", feed.id).cyan(),
-            feed.title.bold(),
-            format!("({})", feed.url).dimmed()
+            format!("[{}]", feed.id).cyan(),         // ID（シアン色）
+            feed.title.bold(),                        // タイトル（太字）
+            format!("({})", feed.url).dimmed()        // URL（薄い色）
         );
+
+        // 説明があれば表示（最初の80文字まで）
         if let Some(desc) = &feed.description {
+            // `chars()` でUnicode文字単位でイテレート
+            // `take(80)` で最初の80文字を取得
+            // `collect()` で String に収集
             let short_desc: String = desc.chars().take(80).collect();
             println!("      {}", short_desc.dimmed());
         }
@@ -70,7 +179,25 @@ pub fn list_feeds(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// Fetch new articles from all feeds
+// =============================================================================
+// 記事関連コマンド
+// =============================================================================
+
+/// 全フィードから新しい記事を取得する
+///
+/// # 処理の流れ
+///
+/// 1. 登録済みの全フィードを取得
+/// 2. 各フィードについて:
+///    - RSSを取得・パース
+///    - 新規記事をデータベースに保存
+///    - 結果を表示
+/// 3. 取得した記事数のサマリーを表示
+///
+/// # エラーハンドリング
+///
+/// 個別のフィード取得エラーは表示のみで、他のフィードの処理は続行します。
+/// これにより、1つのフィードが壊れていても全体が失敗しません。
 pub async fn fetch_feeds(db: &Database) -> Result<()> {
     let feeds = db.get_feeds()?;
 
@@ -82,28 +209,47 @@ pub async fn fetch_feeds(db: &Database) -> Result<()> {
     println!("{}", "Fetching articles from all feeds...".blue());
     println!();
 
+    // 新規取得記事数のカウンター
+    // `mut` で可変変数として宣言
     let mut total_new = 0;
 
+    // 各フィードを処理
     for stored_feed in feeds {
+        // プログレス表示（改行なし）
+        // `print!` は改行しない版の `println!`
         print!("  {} {}... ", "Fetching".dimmed(), stored_feed.title);
 
+        // フィード取得を試みる
+        // `match` でResult を処理
         match feed::fetch_feed(&stored_feed.url).await {
             Ok((_feed_info, articles)) => {
+                // 成功: 記事をデータベースに保存
                 let mut new_count = 0;
+
                 for mut article in articles {
+                    // feed_id を設定
+                    // `mut article` なので変更可能
                     article.feed_id = stored_feed.id;
+
+                    // 新規記事（重複でない）の場合はカウント
+                    // `is_some()` は Option が Some かどうかを判定
                     if db.add_article(&article)?.is_some() {
                         new_count += 1;
                     }
                 }
+
+                // 結果表示
                 println!(
                     "{} ({} new)",
                     "OK".green(),
                     new_count.to_string().cyan()
                 );
+
                 total_new += new_count;
             }
             Err(e) => {
+                // エラー: メッセージを表示して続行
+                // エラーを握りつぶさず、表示はする
                 println!("{} ({})", "ERROR".red(), e);
             }
         }
@@ -119,12 +265,35 @@ pub async fn fetch_feeds(db: &Database) -> Result<()> {
     Ok(())
 }
 
-/// Show articles
+/// 記事を一覧表示する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `unread_only` - true なら未読記事のみ表示
+/// * `limit` - 表示する最大件数
+///
+/// # 出力フォーマット
+///
+/// ```text
+/// Articles:
+///
+///   [*] [1] 2024-01-01 Article Title
+///       https://example.com/article
+///   [x] [2] 2024-01-02 Read Article
+///       https://example.com/read
+/// ```
+///
+/// - `[*]` = 未読（シアン色）
+/// - `[x]` = 既読（薄い色）
 pub fn show_articles(db: &Database, unread_only: bool, limit: usize) -> Result<()> {
+    // 記事を取得
     let articles = db.get_articles(unread_only, limit)?;
 
+    // 空の場合の処理
     if articles.is_empty() {
         if unread_only {
+            // 未読がない = 良い状態
             println!("{}", "No unread articles.".green());
         } else {
             println!("{}", "No articles found.".yellow());
@@ -133,6 +302,7 @@ pub fn show_articles(db: &Database, unread_only: bool, limit: usize) -> Result<(
         return Ok(());
     }
 
+    // ヘッダー（フィルタ状態に応じて変更）
     let header = if unread_only {
         "Unread Articles:"
     } else {
@@ -141,18 +311,25 @@ pub fn show_articles(db: &Database, unread_only: bool, limit: usize) -> Result<(
     println!("{}", header.bold().underline());
     println!();
 
+    // 各記事を表示
     for article in articles {
+        // 既読/未読マーカー
+        // 条件式で異なる型を返す場合、両方が同じ型である必要がある
         let read_marker = if article.is_read {
-            "[x]".dimmed()
+            "[x]".dimmed() // ColoredString 型
         } else {
-            "[*]".cyan()
+            "[*]".cyan()   // ColoredString 型
         };
 
+        // 日付フォーマット
+        // `map()` で Option の中身を変換
+        // `unwrap_or_else()` で None 時のデフォルト値
         let date = article
             .published_at
-            .map(|dt| dt.format("%Y-%m-%d").to_string())
-            .unwrap_or_else(|| "----------".to_string());
+            .map(|dt| dt.format("%Y-%m-%d").to_string()) // 日付をフォーマット
+            .unwrap_or_else(|| "----------".to_string()); // 日付なしの場合
 
+        // 記事情報を表示
         println!(
             "  {} {} {} {}",
             read_marker,
@@ -161,7 +338,10 @@ pub fn show_articles(db: &Database, unread_only: bool, limit: usize) -> Result<(
             article.title.bold()
         );
 
+        // URLがあれば表示
         if let Some(url) = &article.url {
+            // `&article.url` は参照を借用
+            // 所有権を移動せずに内容を参照できる
             println!("      {}", url.dimmed());
         }
     }
@@ -169,7 +349,17 @@ pub fn show_articles(db: &Database, unread_only: bool, limit: usize) -> Result<(
     Ok(())
 }
 
-/// Mark an article as read
+/// 記事を既読としてマークする
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `id` - 既読にする記事のID
+///
+/// # 結果
+///
+/// - 記事が存在すれば既読にマーク
+/// - 存在しなければ警告を表示
 pub fn mark_as_read(db: &Database, id: i64) -> Result<()> {
     if db.mark_as_read(id)? {
         println!("{} {}", "Marked as read:".green(), id);

@@ -1,3 +1,31 @@
+//! # データベース操作モジュール
+//!
+//! SQLiteデータベースとの連携を担当するモジュールです。
+//!
+//! ## 概要
+//!
+//! このモジュールは [`Database`] 構造体を提供し、
+//! フィードと記事のCRUD操作（作成・読み取り・更新・削除）を行います。
+//!
+//! ## データベース構成
+//!
+//! - **保存場所**: `~/.rustfeed/rustfeed.db`
+//! - **テーブル**:
+//!   - `feeds`: RSSフィード情報
+//!   - `articles`: 記事情報（feedsへの外部キーを持つ）
+//!
+//! ## 使用例
+//!
+//! ```rust,no_run
+//! use rustfeed::db::Database;
+//!
+//! let db = Database::new()?;
+//! db.init()?;
+//!
+//! // フィード一覧を取得
+//! let feeds = db.get_feeds()?;
+//! ```
+
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
@@ -5,35 +33,122 @@ use std::path::PathBuf;
 
 use crate::models::{Article, Feed};
 
-/// Database handler for rustfeed
+// =============================================================================
+// Database 構造体
+// =============================================================================
+
+/// SQLiteデータベースへの接続を管理する構造体
+///
+/// # 構造体の設計
+///
+/// Rust では構造体のフィールドに対してアクセス修飾子を設定できます。
+/// `conn` フィールドは `pub` がないため、このモジュール内でのみアクセス可能です。
+/// これにより、外部からデータベース接続を直接操作されることを防ぎます。
+///
+/// # ライフタイムについて
+///
+/// この構造体は `Connection` を所有しています。
+/// 構造体がドロップ（破棄）されるとき、Connection も自動的に閉じられます。
+/// これが Rust の RAII（Resource Acquisition Is Initialization）パターンです。
 pub struct Database {
+    /// SQLiteデータベース接続
+    ///
+    /// `rusqlite::Connection` はスレッドセーフではないため、
+    /// 複数スレッドで使用する場合は `Mutex` で保護する必要があります。
     conn: Connection,
 }
 
 impl Database {
-    /// Create a new database connection
+    /// 新しいデータベース接続を作成する
+    ///
+    /// データベースファイルが存在しない場合は自動的に作成されます。
+    /// 親ディレクトリ（`~/.rustfeed/`）も必要に応じて作成されます。
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(Database)`: 接続成功
+    /// - `Err(...)`: ファイル作成やDB接続に失敗
+    ///
+    /// # エラーハンドリング
+    ///
+    /// `with_context()` は `anyhow` クレートの機能で、
+    /// エラーにコンテキスト情報（何をしようとしていたか）を追加します。
+    /// これにより、デバッグ時に原因を特定しやすくなります。
     pub fn new() -> Result<Self> {
+        // データベースファイルのパスを取得
         let db_path = Self::get_db_path()?;
 
-        // Create parent directory if it doesn't exist
+        // 親ディレクトリを作成（存在しない場合）
+        // `if let Some(...)` は Option から値を取り出すイディオム
         if let Some(parent) = db_path.parent() {
+            // `create_dir_all` は `mkdir -p` と同等で、再帰的にディレクトリを作成
             std::fs::create_dir_all(parent)?;
         }
 
+        // データベース接続を開く
+        // `Connection::open` はファイルが存在しなければ新規作成する
         let conn = Connection::open(&db_path)
             .with_context(|| format!("Failed to open database at {:?}", db_path))?;
 
         Ok(Self { conn })
     }
 
-    /// Get the database file path
+    /// データベースファイルのパスを取得する（プライベート関数）
+    ///
+    /// # 戻り値
+    ///
+    /// `~/.rustfeed/rustfeed.db` へのパス
+    ///
+    /// # パスの構築
+    ///
+    /// `PathBuf` は所有権を持つパス型で、`join` で安全にパスを連結できます。
+    /// これにより、OS間のパス区切り文字の違い（`/` vs `\`）を自動処理します。
     fn get_db_path() -> Result<PathBuf> {
+        // `dirs::home_dir()` はホームディレクトリを取得（Noneの可能性あり）
         let home = dirs::home_dir().context("Could not find home directory")?;
+
+        // パスの連結: home/.rustfeed/rustfeed.db
         Ok(home.join(".rustfeed").join("rustfeed.db"))
     }
 
-    /// Initialize database tables
+    /// データベーステーブルを初期化する
+    ///
+    /// `CREATE TABLE IF NOT EXISTS` を使用しているため、
+    /// テーブルが既に存在する場合は何もしません（べき等性）。
+    ///
+    /// # テーブル構造
+    ///
+    /// ## feeds テーブル
+    /// | カラム | 型 | 説明 |
+    /// |--------|-----|------|
+    /// | id | INTEGER | 主キー（自動採番） |
+    /// | url | TEXT | フィードURL（ユニーク） |
+    /// | title | TEXT | タイトル |
+    /// | description | TEXT | 説明（NULL可） |
+    /// | created_at | TEXT | 作成日時（RFC3339） |
+    /// | updated_at | TEXT | 更新日時（RFC3339） |
+    ///
+    /// ## articles テーブル
+    /// | カラム | 型 | 説明 |
+    /// |--------|-----|------|
+    /// | id | INTEGER | 主キー（自動採番） |
+    /// | feed_id | INTEGER | 外部キー（feeds.id） |
+    /// | title | TEXT | タイトル |
+    /// | url | TEXT | 記事URL（NULL可） |
+    /// | content | TEXT | 本文（NULL可） |
+    /// | published_at | TEXT | 公開日時（NULL可） |
+    /// | is_read | INTEGER | 既読フラグ（0/1） |
+    /// | created_at | TEXT | 取得日時 |
+    ///
+    /// # SQLについて
+    ///
+    /// - `PRIMARY KEY AUTOINCREMENT`: 自動的に一意のIDを生成
+    /// - `NOT NULL`: NULL値を禁止
+    /// - `UNIQUE`: 重複を禁止
+    /// - `FOREIGN KEY`: 他テーブルへの参照制約
+    /// - `ON DELETE CASCADE`: 親レコード削除時に子も削除
     pub fn init(&self) -> Result<()> {
+        // feeds テーブルの作成
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS feeds (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,9 +158,10 @@ impl Database {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )",
-            [],
+            [], // パラメータなし
         )?;
 
+        // articles テーブルの作成
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS articles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,7 +178,8 @@ impl Database {
             [],
         )?;
 
-        // Create index for faster queries
+        // インデックスの作成（クエリ高速化のため）
+        // インデックスは検索を高速化するが、挿入/更新時のオーバーヘッドがある
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id)",
             [],
@@ -75,7 +192,31 @@ impl Database {
         Ok(())
     }
 
-    /// Add a new feed
+    // =========================================================================
+    // Feed 関連のCRUD操作
+    // =========================================================================
+
+    /// 新しいフィードをデータベースに追加する
+    ///
+    /// # 引数
+    ///
+    /// * `feed` - 追加するフィード（参照で受け取る）
+    ///
+    /// # 戻り値
+    ///
+    /// 挿入されたレコードのID
+    ///
+    /// # 参照について
+    ///
+    /// `&Feed` は「Feedへの参照」を意味します。
+    /// 所有権を移動せずに値を借用（borrow）するため、
+    /// 呼び出し元は `feed` を引き続き使用できます。
+    ///
+    /// # SQL インジェクション対策
+    ///
+    /// `params![]` マクロを使ったパラメータ化クエリにより、
+    /// SQLインジェクション攻撃を防いでいます。
+    /// 値はプレースホルダ（?1, ?2...）で指定し、実際の値は別途渡します。
     pub fn add_feed(&self, feed: &Feed) -> Result<i64> {
         self.conn.execute(
             "INSERT INTO feeds (url, title, description, created_at, updated_at)
@@ -84,43 +225,93 @@ impl Database {
                 feed.url,
                 feed.title,
                 feed.description,
-                feed.created_at.to_rfc3339(),
+                feed.created_at.to_rfc3339(), // RFC3339形式の文字列に変換
                 feed.updated_at.to_rfc3339(),
             ],
         )?;
 
+        // 最後に挿入されたレコードのIDを返す
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// Remove a feed by ID
+    /// フィードをIDで削除する
+    ///
+    /// # 引数
+    ///
+    /// * `id` - 削除するフィードのID
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(true)`: 削除成功
+    /// - `Ok(false)`: 該当するフィードが存在しなかった
+    ///
+    /// # 注意
+    ///
+    /// `ON DELETE CASCADE` により、関連する記事も自動削除されます。
     pub fn remove_feed(&self, id: i64) -> Result<bool> {
         let affected = self.conn.execute("DELETE FROM feeds WHERE id = ?1", params![id])?;
+        // affected > 0 なら少なくとも1行削除された
         Ok(affected > 0)
     }
 
-    /// Get all feeds
+    /// 全てのフィードを取得する
+    ///
+    /// # 戻り値
+    ///
+    /// フィードのベクター（ID順）
+    ///
+    /// # イテレータとクロージャ
+    ///
+    /// `query_map` はSQLの結果セットをイテレータとして処理します。
+    /// 引数のクロージャ `|row| { ... }` は各行に対して実行され、
+    /// `Feed` 構造体に変換します。
+    ///
+    /// クロージャは `|| {}` で定義する無名関数で、
+    /// 周囲の変数をキャプチャできます。
     pub fn get_feeds(&self) -> Result<Vec<Feed>> {
+        // プリペアドステートメントを作成
         let mut stmt = self.conn.prepare(
             "SELECT id, url, title, description, created_at, updated_at FROM feeds ORDER BY id",
         )?;
 
+        // クエリ実行と結果のマッピング
         let feeds = stmt
             .query_map([], |row| {
+                // 各行を Feed 構造体に変換
+                // row.get(index) でカラムの値を取得
                 Ok(Feed {
-                    id: row.get(0)?,
-                    url: row.get(1)?,
-                    title: row.get(2)?,
-                    description: row.get(3)?,
+                    id: row.get(0)?,         // 1列目: id
+                    url: row.get(1)?,        // 2列目: url
+                    title: row.get(2)?,      // 3列目: title
+                    description: row.get(3)?, // 4列目: description (NULL可)
                     created_at: parse_datetime(row.get::<_, String>(4)?),
                     updated_at: parse_datetime(row.get::<_, String>(5)?),
                 })
             })?
+            // イテレータをVecに収集
+            // `collect::<Result<Vec<_>, _>>()` はエラー処理付きの収集
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(feeds)
     }
 
-    /// Get a feed by ID
+    /// IDでフィードを取得する
+    ///
+    /// # 引数
+    ///
+    /// * `id` - 取得するフィードのID
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(Some(feed))`: フィードが見つかった
+    /// - `Ok(None)`: フィードが見つからなかった
+    /// - `Err(...)`: データベースエラー
+    ///
+    /// # Option型について
+    ///
+    /// `Option<T>` は「値が存在するかもしれない」ことを型で表現します。
+    /// これにより、nullチェックを忘れるバグを防ぎます。
+    #[allow(dead_code)] // 現在未使用だが将来使用予定
     pub fn get_feed(&self, id: i64) -> Result<Option<Feed>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, url, title, description, created_at, updated_at FROM feeds WHERE id = ?1",
@@ -128,6 +319,7 @@ impl Database {
 
         let mut rows = stmt.query(params![id])?;
 
+        // 最初の行があれば取得
         if let Some(row) = rows.next()? {
             Ok(Some(Feed {
                 id: row.get(0)?,
@@ -142,7 +334,26 @@ impl Database {
         }
     }
 
-    /// Add a new article (or ignore if already exists)
+    // =========================================================================
+    // Article 関連のCRUD操作
+    // =========================================================================
+
+    /// 新しい記事を追加する（既存の場合は無視）
+    ///
+    /// # 引数
+    ///
+    /// * `article` - 追加する記事
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(Some(id))`: 新規挿入された場合、そのID
+    /// - `Ok(None)`: 既に存在していた場合（重複URL）
+    ///
+    /// # INSERT OR IGNORE
+    ///
+    /// SQLite の `INSERT OR IGNORE` は、ユニーク制約違反時に
+    /// エラーではなく単に無視します。これにより、
+    /// 同じ記事を重複して登録することを防ぎます。
     pub fn add_article(&self, article: &Article) -> Result<Option<i64>> {
         let result = self.conn.execute(
             "INSERT OR IGNORE INTO articles (feed_id, title, url, content, published_at, is_read, created_at)
@@ -152,8 +363,9 @@ impl Database {
                 article.title,
                 article.url,
                 article.content,
+                // Option<DateTime> を Option<String> に変換
                 article.published_at.map(|dt| dt.to_rfc3339()),
-                article.is_read as i32,
+                article.is_read as i32, // bool を整数に変換（SQLiteはboolがない）
                 article.created_at.to_rfc3339(),
             ],
         )?;
@@ -161,12 +373,22 @@ impl Database {
         if result > 0 {
             Ok(Some(self.conn.last_insert_rowid()))
         } else {
-            Ok(None) // Article already existed
+            Ok(None) // 記事は既に存在していた
         }
     }
 
-    /// Get articles with optional filters
+    /// 記事を取得する（フィルタ付き）
+    ///
+    /// # 引数
+    ///
+    /// * `unread_only` - true なら未読記事のみ取得
+    /// * `limit` - 取得する最大件数
+    ///
+    /// # 戻り値
+    ///
+    /// 記事のベクター（公開日時の降順）
     pub fn get_articles(&self, unread_only: bool, limit: usize) -> Result<Vec<Article>> {
+        // 条件に応じてSQLを切り替え
         let sql = if unread_only {
             "SELECT id, feed_id, title, url, content, published_at, is_read, created_at
              FROM articles WHERE is_read = 0
@@ -187,8 +409,9 @@ impl Database {
                     title: row.get(2)?,
                     url: row.get(3)?,
                     content: row.get(4)?,
+                    // Option<String> を Option<DateTime> に変換
                     published_at: row.get::<_, Option<String>>(5)?.map(parse_datetime),
-                    is_read: row.get::<_, i32>(6)? != 0,
+                    is_read: row.get::<_, i32>(6)? != 0, // 整数を bool に変換
                     created_at: parse_datetime(row.get::<_, String>(7)?),
                 })
             })?
@@ -197,7 +420,16 @@ impl Database {
         Ok(articles)
     }
 
-    /// Mark an article as read
+    /// 記事を既読としてマークする
+    ///
+    /// # 引数
+    ///
+    /// * `id` - 既読にする記事のID
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(true)`: 更新成功
+    /// - `Ok(false)`: 該当する記事が存在しなかった
     pub fn mark_as_read(&self, id: i64) -> Result<bool> {
         let affected = self
             .conn
@@ -206,9 +438,26 @@ impl Database {
     }
 }
 
-/// Parse RFC3339 datetime string
+// =============================================================================
+// ヘルパー関数
+// =============================================================================
+
+/// RFC3339形式の文字列を DateTime<Utc> にパースする
+///
+/// # 引数
+///
+/// * `s` - RFC3339形式の日時文字列（例: "2024-01-01T12:00:00Z"）
+///
+/// # 戻り値
+///
+/// パースされた DateTime。パース失敗時は現在時刻を返す。
+///
+/// # エラー処理
+///
+/// `unwrap_or_else` はエラー時にクロージャを実行してデフォルト値を返します。
+/// これにより、不正な日時形式でもプログラムがパニックしません。
 fn parse_datetime(s: String) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(&s)
-        .map(|dt| dt.with_timezone(&Utc))
-        .unwrap_or_else(|_| Utc::now())
+        .map(|dt| dt.with_timezone(&Utc)) // タイムゾーンをUTCに変換
+        .unwrap_or_else(|_| Utc::now())   // パース失敗時は現在時刻
 }
