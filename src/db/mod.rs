@@ -189,6 +189,20 @@ impl Database {
             [],
         )?;
 
+        // マイグレーション: is_favorite カラムの追加
+        // 既存のテーブルにカラムが存在しない場合のみ追加
+        // SQLiteでは IF NOT EXISTS が使えないため、エラーを無視する
+        let _ = self.conn.execute(
+            "ALTER TABLE articles ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+
+        // is_favorite用のインデックスを追加
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_articles_is_favorite ON articles(is_favorite)",
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -249,7 +263,9 @@ impl Database {
     ///
     /// `ON DELETE CASCADE` により、関連する記事も自動削除されます。
     pub fn remove_feed(&self, id: i64) -> Result<bool> {
-        let affected = self.conn.execute("DELETE FROM feeds WHERE id = ?1", params![id])?;
+        let affected = self
+            .conn
+            .execute("DELETE FROM feeds WHERE id = ?1", params![id])?;
         // affected > 0 なら少なくとも1行削除された
         Ok(affected > 0)
     }
@@ -280,9 +296,9 @@ impl Database {
                 // 各行を Feed 構造体に変換
                 // row.get(index) でカラムの値を取得
                 Ok(Feed {
-                    id: row.get(0)?,         // 1列目: id
-                    url: row.get(1)?,        // 2列目: url
-                    title: row.get(2)?,      // 3列目: title
+                    id: row.get(0)?,          // 1列目: id
+                    url: row.get(1)?,         // 2列目: url
+                    title: row.get(2)?,       // 3列目: title
                     description: row.get(3)?, // 4列目: description (NULL可)
                     created_at: parse_datetime(row.get::<_, String>(4)?),
                     updated_at: parse_datetime(row.get::<_, String>(5)?),
@@ -356,8 +372,8 @@ impl Database {
     /// 同じ記事を重複して登録することを防ぎます。
     pub fn add_article(&self, article: &Article) -> Result<Option<i64>> {
         let result = self.conn.execute(
-            "INSERT OR IGNORE INTO articles (feed_id, title, url, content, published_at, is_read, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT OR IGNORE INTO articles (feed_id, title, url, content, published_at, is_read, is_favorite, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 article.feed_id,
                 article.title,
@@ -366,6 +382,7 @@ impl Database {
                 // Option<DateTime> を Option<String> に変換
                 article.published_at.map(|dt| dt.to_rfc3339()),
                 article.is_read as i32, // bool を整数に変換（SQLiteはboolがない）
+                article.is_favorite as i32, // bool を整数に変換
                 article.created_at.to_rfc3339(),
             ],
         )?;
@@ -390,11 +407,11 @@ impl Database {
     pub fn get_articles(&self, unread_only: bool, limit: usize) -> Result<Vec<Article>> {
         // 条件に応じてSQLを切り替え
         let sql = if unread_only {
-            "SELECT id, feed_id, title, url, content, published_at, is_read, created_at
+            "SELECT id, feed_id, title, url, content, published_at, is_read, is_favorite, created_at
              FROM articles WHERE is_read = 0
              ORDER BY published_at DESC, created_at DESC LIMIT ?1"
         } else {
-            "SELECT id, feed_id, title, url, content, published_at, is_read, created_at
+            "SELECT id, feed_id, title, url, content, published_at, is_read, is_favorite, created_at
              FROM articles
              ORDER BY published_at DESC, created_at DESC LIMIT ?1"
         };
@@ -412,7 +429,8 @@ impl Database {
                     // Option<String> を Option<DateTime> に変換
                     published_at: row.get::<_, Option<String>>(5)?.map(parse_datetime),
                     is_read: row.get::<_, i32>(6)? != 0, // 整数を bool に変換
-                    created_at: parse_datetime(row.get::<_, String>(7)?),
+                    is_favorite: row.get::<_, i32>(7)? != 0, // 整数を bool に変換
+                    created_at: parse_datetime(row.get::<_, String>(8)?),
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -435,6 +453,77 @@ impl Database {
             .conn
             .execute("UPDATE articles SET is_read = 1 WHERE id = ?1", params![id])?;
         Ok(affected > 0)
+    }
+
+    /// 記事をお気に入りに追加する
+    ///
+    /// # 引数
+    ///
+    /// * `id` - お気に入りにする記事のID
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(true)`: 更新成功
+    /// - `Ok(false)`: 該当する記事が存在しなかった
+    pub fn add_favorite(&self, id: i64) -> Result<bool> {
+        let affected = self.conn.execute(
+            "UPDATE articles SET is_favorite = 1 WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(affected > 0)
+    }
+
+    /// 記事をお気に入りから削除する
+    ///
+    /// # 引数
+    ///
+    /// * `id` - お気に入りから削除する記事のID
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(true)`: 更新成功
+    /// - `Ok(false)`: 該当する記事が存在しなかった
+    pub fn remove_favorite(&self, id: i64) -> Result<bool> {
+        let affected = self.conn.execute(
+            "UPDATE articles SET is_favorite = 0 WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(affected > 0)
+    }
+
+    /// お気に入り記事を取得する
+    ///
+    /// # 引数
+    ///
+    /// * `limit` - 取得する最大件数
+    ///
+    /// # 戻り値
+    ///
+    /// お気に入り記事のベクター（公開日時の降順）
+    pub fn get_favorite_articles(&self, limit: usize) -> Result<Vec<Article>> {
+        let sql = "SELECT id, feed_id, title, url, content, published_at, is_read, is_favorite, created_at
+             FROM articles WHERE is_favorite = 1
+             ORDER BY published_at DESC, created_at DESC LIMIT ?1";
+
+        let mut stmt = self.conn.prepare(sql)?;
+
+        let articles = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok(Article {
+                    id: row.get(0)?,
+                    feed_id: row.get(1)?,
+                    title: row.get(2)?,
+                    url: row.get(3)?,
+                    content: row.get(4)?,
+                    published_at: row.get::<_, Option<String>>(5)?.map(parse_datetime),
+                    is_read: row.get::<_, i32>(6)? != 0,
+                    is_favorite: row.get::<_, i32>(7)? != 0,
+                    created_at: parse_datetime(row.get::<_, String>(8)?),
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(articles)
     }
 }
 
@@ -459,5 +548,5 @@ impl Database {
 fn parse_datetime(s: String) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(&s)
         .map(|dt| dt.with_timezone(&Utc)) // タイムゾーンをUTCに変換
-        .unwrap_or_else(|_| Utc::now())   // パース失敗時は現在時刻
+        .unwrap_or_else(|_| Utc::now()) // パース失敗時は現在時刻
 }

@@ -6,17 +6,17 @@ A CLI RSS reader written in Rust.
 
 rustfeed is a command-line RSS feed reader designed to help you efficiently collect and manage information from multiple sources.
 
-## Features (Planned)
+## Features
 
-### Phase 1 (MVP)
-- [ ] Add/remove RSS feeds
-- [ ] Fetch and list articles
-- [ ] Mark articles as read/unread
-- [ ] Local SQLite database for persistence
+### Phase 1 (MVP) ✅
+- [x] Add/remove RSS feeds
+- [x] Fetch and list articles
+- [x] Mark articles as read/unread
+- [x] Local SQLite database for persistence
 
 ### Phase 2
 - [ ] Keyword filtering
-- [ ] Favorites/bookmarks
+- [x] Favorites/bookmarks
 - [ ] TUI (Terminal UI)
 
 ### Phase 3
@@ -51,9 +51,15 @@ rustfeed fetch
 
 # Show articles
 rustfeed articles
+rustfeed articles --unread  # Show unread articles only
 
 # Mark as read
 rustfeed read <article_id>
+
+# Favorites
+rustfeed favorite <article_id>    # Add to favorites
+rustfeed unfavorite <article_id>  # Remove from favorites
+rustfeed favorites                # Show favorite articles
 ```
 
 ## License
