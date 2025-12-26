@@ -1,0 +1,27 @@
+# rustfeed 設定ファイルサンプル
+# ~/.config/rustfeed/config.toml にコピーして使用してください
+
+[general]
+# デフォルトの記事表示件数
+default_limit = 20
+
+# デフォルトで未読のみ表示するか
+show_unread_only = false
+
+# 無効化するフィードのIDリスト（記事を表示したくないフィード）
+# フィードIDは `rustfeed list` コマンドで確認できます
+# 例: disabled_feeds = [2, 3]
+disabled_feeds = []
+
+[display]
+# 日付のフォーマット（chrono形式）
+# %Y: 年, %m: 月, %d: 日, %H: 時, %M: 分, %S: 秒
+date_format = "%Y-%m-%d"
+
+# フィードの説明を表示するか
+show_description = true
+
+[database]
+# データベースファイルのパス
+# ~ はホームディレクトリに展開されます
+path = "~/.rustfeed/rustfeed.db"
