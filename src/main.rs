@@ -211,6 +211,39 @@ enum Commands {
         #[arg(short, long, default_value = "20")]
         limit: usize,
     },
+
+    /// 記事をエクスポートする
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed export                        # JSON形式でエクスポート
+    /// rustfeed export --format markdown      # Markdown形式でエクスポート
+    /// rustfeed export --favorites            # お気に入りのみエクスポート
+    /// rustfeed export --unread -l 50         # 未読50件をエクスポート
+    /// rustfeed export -f json --favorites > articles.json
+    /// ```
+    Export {
+        /// エクスポート形式（json または markdown）
+        ///
+        /// `json`: JSON形式で出力（機械可読、他のツールとの連携に適している）
+        /// `markdown`: Markdown形式で出力（人間可読、ドキュメントとして利用可能）
+        #[arg(short, long, default_value = "json")]
+        format: String,
+
+        /// お気に入り記事のみエクスポートするフラグ
+        #[arg(long)]
+        favorites: bool,
+
+        /// 未読記事のみエクスポートするフラグ
+        #[arg(long)]
+        unread: bool,
+
+        /// エクスポートする記事数の上限（オプション）
+        ///
+        /// 指定しない場合は全記事をエクスポートします。
+        #[arg(short, long)]
+        limit: Option<usize>,
+    },
 }
 
 // =============================================================================
@@ -287,6 +320,15 @@ async fn main() -> Result<()> {
 
         Commands::Favorites { limit } => {
             commands::show_favorites(&db, limit)?;
+        }
+
+        Commands::Export {
+            format,
+            favorites,
+            unread,
+            limit,
+        } => {
+            commands::export_articles(&db, &format, favorites, unread, limit)?;
         }
     }
 

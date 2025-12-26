@@ -24,6 +24,7 @@ use colored::Colorize;
 
 use crate::db::Database;
 use crate::feed;
+use crate::models::Article;
 
 // =============================================================================
 // フィード管理コマンド
@@ -471,6 +472,172 @@ pub fn show_favorites(db: &Database, limit: usize) -> Result<()> {
         // URLがあれば表示
         if let Some(url) = &article.url {
             println!("      {}", url.dimmed());
+        }
+    }
+
+    Ok(())
+}
+
+/// 記事をエクスポートする
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `format` - エクスポート形式（"json" または "markdown"）
+/// * `favorites` - お気に入りのみエクスポートする場合 true
+/// * `unread` - 未読のみエクスポートする場合 true
+/// * `limit` - エクスポートする記事数の上限（None の場合は全件）
+///
+/// # エクスポート形式
+///
+/// ## JSON
+/// 記事の配列を JSON 形式で出力します。機械可読で他のツールとの連携に適しています。
+///
+/// ```json
+/// [
+///   {
+///     "id": 1,
+///     "feed_id": 1,
+///     "title": "記事タイトル",
+///     "url": "https://example.com/article",
+///     ...
+///   }
+/// ]
+/// ```
+///
+/// ## Markdown
+/// 人間が読みやすい Markdown 形式で出力します。ドキュメントとして利用可能です。
+///
+/// ```markdown
+/// # Exported Articles
+///
+/// ## 記事タイトル
+/// **Published:** 2024-01-01  
+/// **URL:** https://example.com/article  
+/// **Read:** Yes
+///
+/// 記事の本文...
+/// ```
+///
+/// # 使用例
+///
+/// ```bash
+/// rustfeed export > articles.json                    # JSON形式で全記事
+/// rustfeed export --format markdown > articles.md    # Markdown形式
+/// rustfeed export --favorites > favorites.json       # お気に入りのみ
+/// rustfeed export --unread -l 50 > unread.json       # 未読50件
+/// ```
+pub fn export_articles(
+    db: &Database,
+    format: &str,
+    favorites: bool,
+    unread: bool,
+    limit: Option<usize>,
+) -> Result<()> {
+    // 記事を取得
+    // お気に入りフラグに基づいて適切なメソッドを呼び出す
+    let articles = if favorites {
+        // お気に入り記事を取得
+        let limit_val = limit.unwrap_or(usize::MAX);
+        db.get_favorite_articles(limit_val)?
+    } else {
+        // 通常の記事を取得
+        let limit_val = limit.unwrap_or(usize::MAX);
+        db.get_articles(unread, limit_val, None)?
+    };
+
+    // 空の場合の処理
+    if articles.is_empty() {
+        eprintln!("{}", "No articles to export.".yellow());
+        return Ok(());
+    }
+
+    // フォーマットに応じてエクスポート
+    match format.to_lowercase().as_str() {
+        "json" => export_as_json(&articles)?,
+        "markdown" | "md" => export_as_markdown(&articles)?,
+        _ => {
+            // サポートされていないフォーマット
+            anyhow::bail!(
+                "Unsupported format: '{}'. Use 'json' or 'markdown'.",
+                format
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// 記事を JSON 形式でエクスポートする
+///
+/// # 引数
+///
+/// * `articles` - エクスポートする記事のスライス
+///
+/// # 実装詳細
+///
+/// `serde_json::to_string_pretty()` を使用して、整形された JSON を出力します。
+/// `pretty` を使うことで、人間が読みやすいインデントされた JSON になります。
+fn export_as_json(articles: &[Article]) -> Result<()> {
+    // serde_json でシリアライズ
+    // to_string_pretty() は整形された（インデント付き）JSON を生成
+    let json =
+        serde_json::to_string_pretty(articles).context("Failed to serialize articles to JSON")?;
+
+    // 標準出力に出力（リダイレクトでファイルに保存可能）
+    println!("{}", json);
+
+    Ok(())
+}
+
+/// 記事を Markdown 形式でエクスポートする
+///
+/// # 引数
+///
+/// * `articles` - エクスポートする記事のスライス
+///
+/// # 実装詳細
+///
+/// 各記事を見出し、メタデータ、本文の順に出力します。
+/// Markdown 形式により、そのままドキュメントとして使用できます。
+fn export_as_markdown(articles: &[Article]) -> Result<()> {
+    // ヘッダー
+    println!("# Exported Articles\n");
+    println!("Total: {} articles\n", articles.len());
+    println!("---\n");
+
+    // 各記事を Markdown 形式で出力
+    for (index, article) in articles.iter().enumerate() {
+        // 記事番号と見出し
+        println!("## {}. {}\n", index + 1, article.title);
+
+        // メタデータ
+        if let Some(ref url) = article.url {
+            println!("**URL:** {}\n", url);
+        }
+
+        if let Some(published_at) = article.published_at {
+            println!(
+                "**Published:** {}\n",
+                published_at.format("%Y-%m-%d %H:%M:%S")
+            );
+        }
+
+        println!("**Read:** {}\n", if article.is_read { "Yes" } else { "No" });
+        println!(
+            "**Favorite:** {}\n",
+            if article.is_favorite { "Yes" } else { "No" }
+        );
+
+        // 本文
+        if let Some(ref content) = article.content {
+            println!("### Content\n");
+            println!("{}\n", content);
+        }
+
+        // 区切り線（最後の記事以外）
+        if index < articles.len() - 1 {
+            println!("---\n");
         }
     }
 
