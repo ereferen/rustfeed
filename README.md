@@ -20,6 +20,8 @@ rustfeed is a command-line RSS feed reader designed to help you efficiently coll
 - [x] Export to various formats (JSON/Markdown)
 - [x] Configuration file support
 - [x] Feed filtering
+- [x] Feed management (rename, categorize, prioritize)
+- [x] Read management (batch mark, toggle)
 
 ### Phase 3
 - [ ] TUI (Terminal UI)
@@ -47,6 +49,14 @@ rustfeed add <url>
 
 # List feeds
 rustfeed list
+rustfeed list --category "Tech"         # Filter by category
+
+# Feed management
+rustfeed rename <feed_id> "New Name"    # Rename feed
+rustfeed update-url <feed_id> <new_url> # Update feed URL
+rustfeed set-category <feed_id> "Tech"  # Set category
+rustfeed set-priority <feed_id> 10      # Set priority (higher = first)
+rustfeed info <feed_id>                 # Show feed details
 
 # Fetch articles
 rustfeed fetch
@@ -59,8 +69,15 @@ rustfeed articles --filter "rust,cargo" # Filter by multiple keywords (OR)
 rustfeed articles --feed 2              # Show articles from feed ID 2 only
 rustfeed articles --filter "rust" --unread -l 10  # Combine filters
 
-# Mark as read
-rustfeed read <article_id>
+# Read management
+rustfeed read <article_id>              # Mark single article as read
+rustfeed mark-all-read                  # Mark all articles as read
+rustfeed mark-all-read --feed 2         # Mark all from feed 2 as read
+rustfeed mark-all-read --before "2025-01-01"  # Mark old articles as read
+rustfeed mark-unread <article_id>       # Mark as unread
+rustfeed mark-unread --feed 2           # Mark all from feed 2 as unread
+rustfeed mark-unread --all              # Mark all as unread
+rustfeed toggle-read <article_id>       # Toggle read/unread status
 
 # Favorites
 rustfeed favorite <article_id>    # Add to favorites

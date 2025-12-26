@@ -32,6 +32,9 @@ use serde::{Deserialize, Serialize};
 /// | `description` | `Option<String>` | フィードの説明（任意） |
 /// | `created_at` | `DateTime<Utc>` | 作成日時 |
 /// | `updated_at` | `DateTime<Utc>` | 更新日時 |
+/// | `custom_name` | `Option<String>` | カスタム名（NULLの場合はtitleを使用） |
+/// | `category` | `Option<String>` | カテゴリ（任意） |
+/// | `priority` | `i64` | 優先順位（デフォルト0、高いほど優先） |
 ///
 /// # Derive マクロの説明
 ///
@@ -85,6 +88,21 @@ pub struct Feed {
 
     /// 最終更新日時（UTC）
     pub updated_at: DateTime<Utc>,
+
+    /// カスタム名（オプショナル）
+    ///
+    /// ユーザーが設定した任意の名前。NULLの場合は `title` が表示に使われます。
+    pub custom_name: Option<String>,
+
+    /// カテゴリ（オプショナル）
+    ///
+    /// フィードをグループ化するためのカテゴリ。例: "Tech", "News", "Blogs"
+    pub category: Option<String>,
+
+    /// 優先順位
+    ///
+    /// 表示順序を決定する優先度。デフォルトは0で、値が高いほど優先的に表示されます。
+    pub priority: i64,
 }
 
 impl Feed {
@@ -100,6 +118,7 @@ impl Feed {
     ///
     /// 新しい `Feed` インスタンス。`id` は 0 に初期化され、
     /// `created_at` と `updated_at` は現在時刻に設定されます。
+    /// `custom_name` と `category` は None、`priority` は 0 に初期化されます。
     ///
     /// # 所有権について
     ///
@@ -128,6 +147,9 @@ impl Feed {
             description,
             created_at: now,
             updated_at: now,
+            custom_name: None, // デフォルトはNone（titleを使用）
+            category: None,    // デフォルトはNone（カテゴリなし）
+            priority: 0,       // デフォルト優先順位は0
         }
     }
 }

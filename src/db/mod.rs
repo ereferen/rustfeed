@@ -127,6 +127,9 @@ impl Database {
     /// | description | TEXT | 説明（NULL可） |
     /// | created_at | TEXT | 作成日時（RFC3339） |
     /// | updated_at | TEXT | 更新日時（RFC3339） |
+    /// | custom_name | TEXT | カスタム名（NULL時はtitleを使用） |
+    /// | category | TEXT | カテゴリ（NULL可） |
+    /// | priority | INTEGER | 優先順位（デフォルト0、高いほど優先） |
     ///
     /// ## articles テーブル
     /// | カラム | 型 | 説明 |
@@ -203,6 +206,29 @@ impl Database {
             [],
         )?;
 
+        // マイグレーション: feeds テーブルに新しいカラムを追加
+        // カスタム名（NULL時はtitleを使用）
+        let _ = self
+            .conn
+            .execute("ALTER TABLE feeds ADD COLUMN custom_name TEXT", []);
+
+        // カテゴリ（NULL可）
+        let _ = self
+            .conn
+            .execute("ALTER TABLE feeds ADD COLUMN category TEXT", []);
+
+        // 優先順位（デフォルト0、高いほど優先）
+        let _ = self.conn.execute(
+            "ALTER TABLE feeds ADD COLUMN priority INTEGER DEFAULT 0",
+            [],
+        );
+
+        // category用のインデックスを追加（カテゴリでのフィルタリングを高速化）
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_feeds_category ON feeds(category)",
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -233,14 +259,17 @@ impl Database {
     /// 値はプレースホルダ（?1, ?2...）で指定し、実際の値は別途渡します。
     pub fn add_feed(&self, feed: &Feed) -> Result<i64> {
         self.conn.execute(
-            "INSERT INTO feeds (url, title, description, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO feeds (url, title, description, created_at, updated_at, custom_name, category, priority)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 feed.url,
                 feed.title,
                 feed.description,
                 feed.created_at.to_rfc3339(), // RFC3339形式の文字列に変換
                 feed.updated_at.to_rfc3339(),
+                feed.custom_name,
+                feed.category,
+                feed.priority,
             ],
         )?;
 
@@ -272,9 +301,13 @@ impl Database {
 
     /// 全てのフィードを取得する
     ///
+    /// # 引数
+    ///
+    /// * `category` - フィルタリングするカテゴリ（Noneの場合は全件取得）
+    ///
     /// # 戻り値
     ///
-    /// フィードのベクター（ID順）
+    /// フィードのベクター（優先順位の降順、同じ優先順位ではID順）
     ///
     /// # イテレータとクロージャ
     ///
@@ -284,31 +317,43 @@ impl Database {
     ///
     /// クロージャは `|| {}` で定義する無名関数で、
     /// 周囲の変数をキャプチャできます。
-    pub fn get_feeds(&self) -> Result<Vec<Feed>> {
+    pub fn get_feeds(&self, category: Option<&str>) -> Result<Vec<Feed>> {
+        // 全件取得してRustコードでフィルタリング
         // プリペアドステートメントを作成
         let mut stmt = self.conn.prepare(
-            "SELECT id, url, title, description, created_at, updated_at FROM feeds ORDER BY id",
+            "SELECT id, url, title, description, created_at, updated_at, custom_name, category, priority 
+             FROM feeds 
+             ORDER BY priority DESC, id",
         )?;
 
         // クエリ実行と結果のマッピング
         let feeds = stmt
             .query_map([], |row| {
-                // 各行を Feed 構造体に変換
-                // row.get(index) でカラムの値を取得
                 Ok(Feed {
-                    id: row.get(0)?,          // 1列目: id
-                    url: row.get(1)?,         // 2列目: url
-                    title: row.get(2)?,       // 3列目: title
-                    description: row.get(3)?, // 4列目: description (NULL可)
+                    id: row.get(0)?,
+                    url: row.get(1)?,
+                    title: row.get(2)?,
+                    description: row.get(3)?,
                     created_at: parse_datetime(row.get::<_, String>(4)?),
                     updated_at: parse_datetime(row.get::<_, String>(5)?),
+                    custom_name: row.get(6)?,
+                    category: row.get(7)?,
+                    priority: row.get(8).unwrap_or(0),
                 })
             })?
-            // イテレータをVecに収集
-            // `collect::<Result<Vec<_>, _>>()` はエラー処理付きの収集
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(feeds)
+        // カテゴリフィルタを適用
+        let result = if let Some(cat) = category {
+            feeds
+                .into_iter()
+                .filter(|f| f.category.as_deref() == Some(cat))
+                .collect()
+        } else {
+            feeds
+        };
+
+        Ok(result)
     }
 
     /// IDでフィードを取得する
@@ -330,7 +375,8 @@ impl Database {
     #[allow(dead_code)] // 現在未使用だが将来使用予定
     pub fn get_feed(&self, id: i64) -> Result<Option<Feed>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, url, title, description, created_at, updated_at FROM feeds WHERE id = ?1",
+            "SELECT id, url, title, description, created_at, updated_at, custom_name, category, priority 
+             FROM feeds WHERE id = ?1",
         )?;
 
         let mut rows = stmt.query(params![id])?;
@@ -344,10 +390,75 @@ impl Database {
                 description: row.get(3)?,
                 created_at: parse_datetime(row.get::<_, String>(4)?),
                 updated_at: parse_datetime(row.get::<_, String>(5)?),
+                custom_name: row.get(6)?,
+                category: row.get(7)?,
+                priority: row.get(8).unwrap_or(0),
             }))
         } else {
             Ok(None)
         }
+    }
+
+    /// フィードのカスタム名を設定する
+    ///
+    /// # 引数
+    /// * `feed_id` - 更新するフィードのID
+    /// * `custom_name` - 設定するカスタム名（NULLの場合は元のtitleが使われる）
+    ///
+    /// # 使用例
+    /// ```
+    /// db.rename_feed(1, Some("My Tech Blog"))?;
+    /// db.rename_feed(2, None)?;  // カスタム名をクリア
+    /// ```
+    pub fn rename_feed(&self, feed_id: i64, custom_name: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE feeds SET custom_name = ?1 WHERE id = ?2",
+            params![custom_name, feed_id],
+        )?;
+        Ok(())
+    }
+
+    /// フィードのURLを更新する
+    ///
+    /// # 引数
+    /// * `feed_id` - 更新するフィードのID
+    /// * `new_url` - 新しいURL
+    ///
+    /// # エラー
+    /// 新しいURLが既に他のフィードで使用されている場合、UNIQUE制約違反でエラーになります。
+    pub fn update_feed_url(&self, feed_id: i64, new_url: &str) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE feeds SET url = ?1, updated_at = ?2 WHERE id = ?3",
+            params![new_url, now, feed_id],
+        )?;
+        Ok(())
+    }
+
+    /// フィードのカテゴリを設定する
+    ///
+    /// # 引数
+    /// * `feed_id` - 更新するフィードのID
+    /// * `category` - 設定するカテゴリ（NULLの場合はカテゴリをクリア）
+    pub fn set_feed_category(&self, feed_id: i64, category: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE feeds SET category = ?1 WHERE id = ?2",
+            params![category, feed_id],
+        )?;
+        Ok(())
+    }
+
+    /// フィードの優先順位を設定する
+    ///
+    /// # 引数
+    /// * `feed_id` - 更新するフィードのID
+    /// * `priority` - 優先順位（高いほど優先、デフォルト0）
+    pub fn set_feed_priority(&self, feed_id: i64, priority: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE feeds SET priority = ?1 WHERE id = ?2",
+            params![priority, feed_id],
+        )?;
+        Ok(())
     }
 
     // =========================================================================

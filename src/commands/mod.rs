@@ -128,21 +128,26 @@ pub fn remove_feed(db: &Database, id: i64) -> Result<()> {
 
 /// 登録済みの全フィードを一覧表示する
 ///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `category` - フィルタリングするカテゴリ（Noneの場合は全件表示）
+///
 /// # 出力フォーマット
 ///
 /// ```text
 /// Registered Feeds:
 ///
-///   [1] Feed Title (https://example.com/feed.xml)
+///   [1] Feed Title [Category] (priority: 10) (https://example.com/feed.xml)
 ///       Description text...
 /// ```
 ///
 /// # 空の場合
 ///
 /// フィードが登録されていない場合は、使い方のヒントを表示します。
-pub fn list_feeds(db: &Database) -> Result<()> {
-    // データベースから全フィードを取得
-    let feeds = db.get_feeds()?;
+pub fn list_feeds(db: &Database, category: Option<&str>) -> Result<()> {
+    // データベースから全フィードを取得（カテゴリフィルタ適用）
+    let feeds = db.get_feeds(category)?;
 
     // フィードが空の場合
     if feeds.is_empty() {
@@ -159,13 +164,32 @@ pub fn list_feeds(db: &Database) -> Result<()> {
     // 各フィードを表示
     // `for ... in` はイテレータをループ処理
     for feed in feeds {
+        // 表示名を決定（custom_nameがあればそれを使用、なければtitle）
+        let display_name = feed.custom_name.as_deref().unwrap_or(&feed.title);
+
         // フォーマット文字列で整形
-        println!(
-            "  {} {} {}",
-            format!("[{}]", feed.id).cyan(),    // ID（シアン色）
-            feed.title.bold(),                  // タイトル（太字）
-            format!("({})", feed.url).dimmed()  // URL（薄い色）
-        );
+        let mut info_parts = vec![
+            format!("[{}]", feed.id).cyan().to_string(),
+            display_name.bold().to_string(),
+        ];
+
+        // カテゴリがあれば追加
+        if let Some(category) = &feed.category {
+            info_parts.push(format!("[{}]", category).green().to_string());
+        }
+
+        // 優先順位が0でなければ表示
+        if feed.priority != 0 {
+            info_parts.push(
+                format!("(priority: {})", feed.priority)
+                    .magenta()
+                    .to_string(),
+            );
+        }
+
+        info_parts.push(format!("({})", feed.url).dimmed().to_string());
+
+        println!("  {}", info_parts.join(" "));
 
         // 説明があれば表示（最初の80文字まで）
         if let Some(desc) = &feed.description {
@@ -175,6 +199,188 @@ pub fn list_feeds(db: &Database) -> Result<()> {
             let short_desc: String = desc.chars().take(80).collect();
             println!("      {}", short_desc.dimmed());
         }
+    }
+
+    Ok(())
+}
+
+/// フィードの名前を変更する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `feed_id` - 変更するフィードのID
+/// * `name` - 新しい名前（空文字列の場合はカスタム名をクリア）
+///
+/// # 使用例
+///
+/// ```bash
+/// rustfeed rename 1 "My Tech Blog"
+/// rustfeed rename 1 ""  # カスタム名をクリア
+/// ```
+pub fn rename_feed(db: &Database, feed_id: i64, name: &str) -> Result<()> {
+    let custom_name = if name.is_empty() { None } else { Some(name) };
+
+    db.rename_feed(feed_id, custom_name)?;
+
+    if custom_name.is_some() {
+        println!(
+            "{} {} {}",
+            "Feed".green(),
+            feed_id,
+            format!("renamed to '{}'", name).green().bold()
+        );
+    } else {
+        println!(
+            "{} {} {}",
+            "Feed".green(),
+            feed_id,
+            "custom name cleared (using original title)".green().bold()
+        );
+    }
+
+    Ok(())
+}
+
+/// フィードのURLを更新する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `feed_id` - 更新するフィードのID
+/// * `new_url` - 新しいURL
+pub fn update_feed_url(db: &Database, feed_id: i64, new_url: &str) -> Result<()> {
+    db.update_feed_url(feed_id, new_url)?;
+
+    println!(
+        "{} {} {} {}",
+        "Feed".green(),
+        feed_id,
+        "URL updated to".green().bold(),
+        new_url.cyan()
+    );
+
+    Ok(())
+}
+
+/// フィードのカテゴリを設定する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `feed_id` - 設定するフィードのID
+/// * `category` - カテゴリ名（空文字列の場合はカテゴリをクリア）
+pub fn set_feed_category(db: &Database, feed_id: i64, category: &str) -> Result<()> {
+    let cat = if category.is_empty() {
+        None
+    } else {
+        Some(category)
+    };
+
+    db.set_feed_category(feed_id, cat)?;
+
+    if cat.is_some() {
+        println!(
+            "{} {} {} {}",
+            "Feed".green(),
+            feed_id,
+            "category set to".green().bold(),
+            format!("[{}]", category).green()
+        );
+    } else {
+        println!(
+            "{} {} {}",
+            "Feed".green(),
+            feed_id,
+            "category cleared".green().bold()
+        );
+    }
+
+    Ok(())
+}
+
+/// フィードの優先順位を設定する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `feed_id` - 設定するフィードのID
+/// * `priority` - 優先順位（高いほど優先）
+pub fn set_feed_priority(db: &Database, feed_id: i64, priority: i64) -> Result<()> {
+    db.set_feed_priority(feed_id, priority)?;
+
+    println!(
+        "{} {} {} {}",
+        "Feed".green(),
+        feed_id,
+        "priority set to".green().bold(),
+        priority.to_string().magenta()
+    );
+
+    Ok(())
+}
+
+/// フィードの詳細情報を表示する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `feed_id` - 表示するフィードのID
+pub fn show_feed_info(db: &Database, feed_id: i64) -> Result<()> {
+    let feed = db.get_feed(feed_id)?;
+
+    if let Some(feed) = feed {
+        println!("{}", "Feed Information:".bold().underline());
+        println!();
+        println!("  {}: {}", "ID".cyan(), feed.id);
+        println!("  {}: {}", "Title".cyan(), feed.title.bold());
+
+        if let Some(custom_name) = &feed.custom_name {
+            println!("  {}: {}", "Custom Name".cyan(), custom_name.bold().green());
+        }
+
+        println!("  {}: {}", "URL".cyan(), feed.url);
+
+        if let Some(description) = &feed.description {
+            println!("  {}: {}", "Description".cyan(), description);
+        }
+
+        if let Some(category) = &feed.category {
+            println!(
+                "  {}: {}",
+                "Category".cyan(),
+                format!("[{}]", category).green()
+            );
+        }
+
+        println!(
+            "  {}: {}",
+            "Priority".cyan(),
+            feed.priority.to_string().magenta()
+        );
+
+        println!(
+            "  {}: {}",
+            "Created".cyan(),
+            feed.created_at.format("%Y-%m-%d %H:%M:%S")
+        );
+        println!(
+            "  {}: {}",
+            "Updated".cyan(),
+            feed.updated_at.format("%Y-%m-%d %H:%M:%S")
+        );
+
+        // 記事数を取得して表示
+        let articles = db.get_articles(false, usize::MAX, None, Some(feed_id))?;
+        let unread_count = articles.iter().filter(|a| !a.is_read).count();
+        println!(
+            "  {}: {} (unread: {})",
+            "Articles".cyan(),
+            articles.len(),
+            unread_count.to_string().yellow()
+        );
+    } else {
+        println!("{} {}", "Feed not found with ID:".yellow(), feed_id);
     }
 
     Ok(())
@@ -200,7 +406,7 @@ pub fn list_feeds(db: &Database) -> Result<()> {
 /// 個別のフィード取得エラーは表示のみで、他のフィードの処理は続行します。
 /// これにより、1つのフィードが壊れていても全体が失敗しません。
 pub async fn fetch_feeds(db: &Database) -> Result<()> {
-    let feeds = db.get_feeds()?;
+    let feeds = db.get_feeds(None)?;
 
     if feeds.is_empty() {
         println!("{}", "No feeds registered yet.".yellow());

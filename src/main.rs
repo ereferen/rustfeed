@@ -128,9 +128,14 @@ enum Commands {
     ///
     /// # 使用例
     /// ```bash
-    /// rustfeed list
+    /// rustfeed list                        # 全フィード
+    /// rustfeed list --category "Tech"     # Techカテゴリのみ
     /// ```
-    List,
+    List {
+        /// カテゴリでフィルタリング（オプション）
+        #[arg(long)]
+        category: Option<String>,
+    },
 
     /// 全フィードから新しい記事を取得する
     ///
@@ -303,6 +308,76 @@ enum Commands {
         /// 反転する記事のID
         id: i64,
     },
+
+    /// フィードの名前を変更する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed rename 1 "My Tech Blog"       # フィード1の名前を変更
+    /// rustfeed rename 1 ""                   # カスタム名をクリア（元のタイトルに戻す）
+    /// ```
+    Rename {
+        /// 変更するフィードのID
+        id: i64,
+
+        /// 新しい名前（空文字列の場合はカスタム名をクリア）
+        name: String,
+    },
+
+    /// フィードのURLを更新する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed update-url 1 https://example.com/new-feed.xml
+    /// ```
+    UpdateUrl {
+        /// 更新するフィードのID
+        id: i64,
+
+        /// 新しいURL
+        url: String,
+    },
+
+    /// フィードのカテゴリを設定する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed set-category 1 "Tech"         # フィード1にTechカテゴリを設定
+    /// rustfeed set-category 1 ""             # カテゴリをクリア
+    /// ```
+    SetCategory {
+        /// 設定するフィードのID
+        id: i64,
+
+        /// カテゴリ名（空文字列の場合はカテゴリをクリア）
+        category: String,
+    },
+
+    /// フィードの優先順位を設定する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed set-priority 1 10             # フィード1の優先順位を10に設定
+    /// rustfeed set-priority 2 0              # フィード2の優先順位をデフォルトに戻す
+    /// ```
+    SetPriority {
+        /// 設定するフィードのID
+        id: i64,
+
+        /// 優先順位（高いほど優先、デフォルト0）
+        priority: i64,
+    },
+
+    /// フィードの詳細情報を表示する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed info 1                        # フィード1の詳細を表示
+    /// ```
+    Info {
+        /// 表示するフィードのID
+        id: i64,
+    },
 }
 
 // =============================================================================
@@ -352,8 +427,8 @@ async fn main() -> Result<()> {
             commands::remove_feed(&db, id)?;
         }
 
-        Commands::List => {
-            commands::list_feeds(&db)?;
+        Commands::List { category } => {
+            commands::list_feeds(&db, category.as_deref())?;
         }
 
         Commands::Fetch => {
@@ -430,6 +505,26 @@ async fn main() -> Result<()> {
 
         Commands::ToggleRead { id } => {
             commands::toggle_read(&db, id)?;
+        }
+
+        Commands::Rename { id, name } => {
+            commands::rename_feed(&db, id, &name)?;
+        }
+
+        Commands::UpdateUrl { id, url } => {
+            commands::update_feed_url(&db, id, &url)?;
+        }
+
+        Commands::SetCategory { id, category } => {
+            commands::set_feed_category(&db, id, &category)?;
+        }
+
+        Commands::SetPriority { id, priority } => {
+            commands::set_feed_priority(&db, id, priority)?;
+        }
+
+        Commands::Info { id } => {
+            commands::show_feed_info(&db, id)?;
         }
     }
 
