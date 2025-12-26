@@ -22,6 +22,7 @@ rustfeed is a command-line RSS feed reader designed to help you efficiently coll
 - [x] Feed filtering
 - [x] Feed management (rename, categorize, prioritize)
 - [x] Read management (batch mark, toggle)
+- [x] Article search with date range filtering
 
 ### Phase 3
 - [ ] TUI (Terminal UI)
@@ -67,7 +68,16 @@ rustfeed articles --unread              # Show unread articles only
 rustfeed articles --filter "rust"       # Filter by keyword
 rustfeed articles --filter "rust,cargo" # Filter by multiple keywords (OR)
 rustfeed articles --feed 2              # Show articles from feed ID 2 only
-rustfeed articles --filter "rust" --unread -l 10  # Combine filters
+rustfeed articles --after "2025-01-01"  # Articles from Jan 1, 2025 onwards
+rustfeed articles --before "2025-12-31" # Articles before Dec 31, 2025
+rustfeed articles --last-days 7         # Articles from the past 7 days
+rustfeed articles --last-weeks 2        # Articles from the past 2 weeks
+rustfeed articles --filter "rust" --unread -l 10 --last-days 7  # Complex filters
+
+# Search articles
+rustfeed search "rust async"            # Full-text search
+rustfeed search "docker" --unread -l 10 # Search unread articles
+rustfeed search "kubernetes" --after "2025-01-01"  # Search with date filter
 
 # Read management
 rustfeed read <article_id>              # Mark single article as read

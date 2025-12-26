@@ -33,6 +33,10 @@ Phase 1 (MVP) completed ✅. Phase 2 completed ✅:
   - ⏳ Tauri GUI (optional)
 
 ## Recent Updates
+- **2025-12-26 - Issue #12 (Partial)**: Article Search Features
+  - Date range filtering (--after, --before, --last-days, --last-weeks)
+  - Basic full-text search command
+  - Deferred: SQLite FTS5, AND/OR/NOT operators, saved searches (for post-TUI)
 - **2025-12-26 - Issue #11**: Feed Management Extensions
   - Feed renaming (custom_name field)
   - Feed URL updates

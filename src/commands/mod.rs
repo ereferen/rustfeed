@@ -478,6 +478,8 @@ pub async fn fetch_feeds(db: &Database) -> Result<()> {
 /// * `filter` - キーワードフィルタ（カンマ区切りで複数指定可能）
 /// * `feed_id` - 特定のフィードIDでフィルタ（None の場合は全フィード）
 /// * `disabled_feeds` - 無効化するフィードIDのリスト
+/// * `after` - この日付以降の記事のみ表示（YYYY-MM-DD形式）
+/// * `before` - この日付以前の記事のみ表示（YYYY-MM-DD形式）
 ///
 /// # 出力フォーマット
 ///
@@ -492,6 +494,7 @@ pub async fn fetch_feeds(db: &Database) -> Result<()> {
 ///
 /// - `[*]` = 未読（シアン色）
 /// - `[x]` = 既読（薄い色）
+#[allow(clippy::too_many_arguments)]
 pub fn show_articles(
     db: &Database,
     unread_only: bool,
@@ -499,6 +502,8 @@ pub fn show_articles(
     filter: Option<&str>,
     feed_id: Option<i64>,
     disabled_feeds: &[i64],
+    after: Option<&str>,
+    before: Option<&str>,
 ) -> Result<()> {
     // 記事を取得
     let mut articles = db.get_articles(unread_only, limit, filter, feed_id)?;
@@ -506,6 +511,25 @@ pub fn show_articles(
     // disabled_feedsでフィルタリング（feed_idが指定されていない場合のみ）
     if feed_id.is_none() && !disabled_feeds.is_empty() {
         articles.retain(|article| !disabled_feeds.contains(&article.feed_id));
+    }
+
+    // 日付範囲でフィルタリング
+    if let Some(after_date) = after {
+        articles.retain(|article| {
+            article
+                .published_at
+                .map(|dt| dt.format("%Y-%m-%d").to_string().as_str() >= after_date)
+                .unwrap_or(false)
+        });
+    }
+
+    if let Some(before_date) = before {
+        articles.retain(|article| {
+            article
+                .published_at
+                .map(|dt| dt.format("%Y-%m-%d").to_string().as_str() <= before_date)
+                .unwrap_or(false)
+        });
     }
 
     // 空の場合の処理

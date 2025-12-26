@@ -154,7 +154,11 @@ enum Commands {
     /// rustfeed articles -l 10              # 10件まで
     /// rustfeed articles --filter "rust"    # キーワードでフィルタ
     /// rustfeed articles --feed 2           # フィードID 2の記事のみ
-    /// rustfeed articles --filter "rust,cargo" --unread --feed 2  # 複合フィルタ
+    /// rustfeed articles --after "2025-01-01"  # 2025年1月1日以降
+    /// rustfeed articles --before "2025-12-31" # 2025年12月31日以前
+    /// rustfeed articles --last-days 7      # 過去7日間
+    /// rustfeed articles --last-weeks 2     # 過去2週間
+    /// rustfeed articles --filter "rust,cargo" --unread --feed 2 --last-days 7  # 複合フィルタ
     /// ```
     Articles {
         /// 未読記事のみを表示するフラグ
@@ -178,6 +182,55 @@ enum Commands {
         /// フィードIDは `rustfeed list` コマンドで確認できます。
         #[arg(long)]
         feed: Option<i64>,
+
+        /// 指定日時以降の記事のみを表示（YYYY-MM-DD形式）
+        #[arg(long)]
+        after: Option<String>,
+
+        /// 指定日時以前の記事のみを表示（YYYY-MM-DD形式）
+        #[arg(long)]
+        before: Option<String>,
+
+        /// 過去N日間の記事のみを表示
+        #[arg(long, conflicts_with_all = ["after", "before"])]
+        last_days: Option<u32>,
+
+        /// 過去N週間の記事のみを表示
+        #[arg(long, conflicts_with_all = ["after", "before", "last_days"])]
+        last_weeks: Option<u32>,
+    },
+
+    /// 記事を全文検索する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed search "rust async"                 # 基本検索
+    /// rustfeed search "rust" --unread -l 10        # 未読のみ10件
+    /// rustfeed search "rust" --after "2025-01-01"  # 日付フィルタ併用
+    /// ```
+    Search {
+        /// 検索クエリ
+        query: String,
+
+        /// 未読記事のみを検索
+        #[arg(short, long)]
+        unread: bool,
+
+        /// 検索結果の上限（デフォルト: 20）
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// 特定のフィードIDのみ検索
+        #[arg(long)]
+        feed: Option<i64>,
+
+        /// 指定日時以降の記事のみ検索
+        #[arg(long)]
+        after: Option<String>,
+
+        /// 指定日時以前の記事のみ検索
+        #[arg(long)]
+        before: Option<String>,
     },
 
     /// 記事を既読としてマークする
@@ -441,7 +494,13 @@ async fn main() -> Result<()> {
             limit,
             filter,
             feed,
+            after,
+            before,
+            last_days,
+            last_weeks,
         } => {
+            use chrono::{Duration, Utc};
+
             // limitが指定されていない場合、設定ファイルのデフォルト値を使用
             let limit_val = limit.unwrap_or(config.general.default_limit);
 
@@ -460,6 +519,17 @@ async fn main() -> Result<()> {
                 feed
             };
 
+            // 日付範囲を計算
+            let (after_date, before_date) = if let Some(days) = last_days {
+                let after = Utc::now() - Duration::days(days as i64);
+                (Some(after.format("%Y-%m-%d").to_string()), None)
+            } else if let Some(weeks) = last_weeks {
+                let after = Utc::now() - Duration::weeks(weeks as i64);
+                (Some(after.format("%Y-%m-%d").to_string()), None)
+            } else {
+                (after, before)
+            };
+
             commands::show_articles(
                 &db,
                 unread,
@@ -467,6 +537,30 @@ async fn main() -> Result<()> {
                 filter.as_deref(),
                 final_feed,
                 &config.general.disabled_feeds,
+                after_date.as_deref(),
+                before_date.as_deref(),
+            )?;
+        }
+
+        Commands::Search {
+            query,
+            unread,
+            limit,
+            feed,
+            after,
+            before,
+        } => {
+            let limit_val = limit.unwrap_or(20);
+
+            commands::show_articles(
+                &db,
+                unread,
+                limit_val,
+                Some(&query),
+                feed,
+                &[], // searchコマンドではdisabled_feedsを無視
+                after.as_deref(),
+                before.as_deref(),
             )?;
         }
 
