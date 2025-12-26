@@ -15,7 +15,7 @@ rustfeed is a command-line RSS feed reader designed to help you efficiently coll
 - [x] Local SQLite database for persistence
 
 ### Phase 2
-- [ ] Keyword filtering
+- [x] Keyword filtering
 - [x] Favorites/bookmarks
 - [ ] TUI (Terminal UI)
 
@@ -51,7 +51,10 @@ rustfeed fetch
 
 # Show articles
 rustfeed articles
-rustfeed articles --unread  # Show unread articles only
+rustfeed articles --unread              # Show unread articles only
+rustfeed articles --filter "rust"       # Filter by keyword
+rustfeed articles --filter "rust,cargo" # Filter by multiple keywords (OR)
+rustfeed articles --filter "rust" --unread -l 10  # Combine filters
 
 # Mark as read
 rustfeed read <article_id>

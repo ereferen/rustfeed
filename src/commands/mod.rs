@@ -268,6 +268,7 @@ pub async fn fetch_feeds(db: &Database) -> Result<()> {
 /// * `db` - データベース接続
 /// * `unread_only` - true なら未読記事のみ表示
 /// * `limit` - 表示する最大件数
+/// * `filter` - キーワードフィルタ（カンマ区切りで複数指定可能）
 ///
 /// # 出力フォーマット
 ///
@@ -282,9 +283,14 @@ pub async fn fetch_feeds(db: &Database) -> Result<()> {
 ///
 /// - `[*]` = 未読（シアン色）
 /// - `[x]` = 既読（薄い色）
-pub fn show_articles(db: &Database, unread_only: bool, limit: usize) -> Result<()> {
+pub fn show_articles(
+    db: &Database,
+    unread_only: bool,
+    limit: usize,
+    filter: Option<&str>,
+) -> Result<()> {
     // 記事を取得
-    let articles = db.get_articles(unread_only, limit)?;
+    let articles = db.get_articles(unread_only, limit, filter)?;
 
     // 空の場合の処理
     if articles.is_empty() {

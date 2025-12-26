@@ -400,36 +400,97 @@ impl Database {
     ///
     /// * `unread_only` - true なら未読記事のみ取得
     /// * `limit` - 取得する最大件数
+    /// * `filter` - キーワードフィルタ（カンマ区切りで複数指定可能、OR条件）
     ///
     /// # 戻り値
     ///
     /// 記事のベクター（公開日時の降順）
-    pub fn get_articles(&self, unread_only: bool, limit: usize) -> Result<Vec<Article>> {
-        // 条件に応じてSQLを切り替え
-        let sql = if unread_only {
+    ///
+    /// # キーワードフィルタについて
+    ///
+    /// `filter` パラメータにキーワードを指定すると、タイトルまたは本文に
+    /// そのキーワードを含む記事のみを取得します。
+    /// 複数のキーワードをカンマで区切って指定すると、いずれかを含む記事を取得します（OR条件）。
+    pub fn get_articles(
+        &self,
+        unread_only: bool,
+        limit: usize,
+        filter: Option<&str>,
+    ) -> Result<Vec<Article>> {
+        // ベースとなるSQLクエリ
+        let mut sql = String::from(
             "SELECT id, feed_id, title, url, content, published_at, is_read, is_favorite, created_at
-             FROM articles WHERE is_read = 0
-             ORDER BY published_at DESC, created_at DESC LIMIT ?1"
-        } else {
-            "SELECT id, feed_id, title, url, content, published_at, is_read, is_favorite, created_at
-             FROM articles
-             ORDER BY published_at DESC, created_at DESC LIMIT ?1"
-        };
+             FROM articles"
+        );
 
-        let mut stmt = self.conn.prepare(sql)?;
+        // WHERE句の条件を格納するベクター
+        let mut conditions = Vec::new();
 
+        // 未読フィルタ
+        if unread_only {
+            conditions.push("is_read = 0".to_string());
+        }
+
+        // キーワードフィルタ
+        // filter が Some の場合、キーワードで検索条件を追加
+        if let Some(filter_str) = filter {
+            // カンマで分割して各キーワードに対する条件を作成
+            // 例: "rust,cargo" -> ["rust", "cargo"]
+            let keywords: Vec<&str> = filter_str.split(',').map(|s| s.trim()).collect();
+
+            if !keywords.is_empty() {
+                // 各キーワードに対してOR条件を作成
+                // (title LIKE '%keyword1%' OR content LIKE '%keyword1%') OR (title LIKE '%keyword2%' OR content LIKE '%keyword2%')
+                let keyword_conditions: Vec<String> = keywords
+                    .iter()
+                    .map(|_| "(title LIKE ? OR content LIKE ?)".to_string())
+                    .collect();
+
+                conditions.push(format!("({})", keyword_conditions.join(" OR ")));
+            }
+        }
+
+        // WHERE句を追加
+        if !conditions.is_empty() {
+            sql.push_str(&format!(" WHERE {}", conditions.join(" AND ")));
+        }
+
+        // ORDER BY と LIMIT を追加
+        sql.push_str(" ORDER BY published_at DESC, created_at DESC LIMIT ?");
+
+        // パラメータを準備
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        // キーワードフィルタのパラメータを追加
+        if let Some(filter_str) = filter {
+            let keywords: Vec<&str> = filter_str.split(',').map(|s| s.trim()).collect();
+            for keyword in keywords {
+                let pattern = format!("%{}%", keyword);
+                // タイトル用とコンテンツ用で2回追加
+                params.push(Box::new(pattern.clone()));
+                params.push(Box::new(pattern));
+            }
+        }
+
+        // limit パラメータを追加
+        params.push(Box::new(limit as i64));
+
+        // プリペアドステートメントを準備
+        let mut stmt = self.conn.prepare(&sql)?;
+
+        // パラメータをバインドして実行
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|b| b.as_ref()).collect();
         let articles = stmt
-            .query_map(params![limit as i64], |row| {
+            .query_map(&params_refs[..], |row| {
                 Ok(Article {
                     id: row.get(0)?,
                     feed_id: row.get(1)?,
                     title: row.get(2)?,
                     url: row.get(3)?,
                     content: row.get(4)?,
-                    // Option<String> を Option<DateTime> に変換
                     published_at: row.get::<_, Option<String>>(5)?.map(parse_datetime),
-                    is_read: row.get::<_, i32>(6)? != 0, // 整数を bool に変換
-                    is_favorite: row.get::<_, i32>(7)? != 0, // 整数を bool に変換
+                    is_read: row.get::<_, i32>(6)? != 0,
+                    is_favorite: row.get::<_, i32>(7)? != 0,
                     created_at: parse_datetime(row.get::<_, String>(8)?),
                 })
             })?

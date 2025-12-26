@@ -143,9 +143,11 @@ enum Commands {
     ///
     /// # 使用例
     /// ```bash
-    /// rustfeed articles           # 全記事
-    /// rustfeed articles --unread  # 未読のみ
-    /// rustfeed articles -l 10     # 10件まで
+    /// rustfeed articles                    # 全記事
+    /// rustfeed articles --unread           # 未読のみ
+    /// rustfeed articles -l 10              # 10件まで
+    /// rustfeed articles --filter "rust"    # キーワードでフィルタ
+    /// rustfeed articles --filter "rust,cargo" --unread  # 複数キーワード、未読のみ
     /// ```
     Articles {
         /// 未読記事のみを表示するフラグ
@@ -155,6 +157,13 @@ enum Commands {
         /// 表示する記事数の上限（デフォルト: 20）
         #[arg(short, long, default_value = "20")]
         limit: usize,
+
+        /// キーワードフィルタ（カンマ区切りで複数指定可能、OR条件）
+        ///
+        /// タイトルまたは本文に指定したキーワードを含む記事のみを表示します。
+        /// 複数のキーワードをカンマで区切って指定すると、いずれかを含む記事を表示します。
+        #[arg(short, long)]
+        filter: Option<String>,
     },
 
     /// 記事を既読としてマークする
@@ -256,8 +265,12 @@ async fn main() -> Result<()> {
             commands::fetch_feeds(&db).await?;
         }
 
-        Commands::Articles { unread, limit } => {
-            commands::show_articles(&db, unread, limit)?;
+        Commands::Articles {
+            unread,
+            limit,
+            filter,
+        } => {
+            commands::show_articles(&db, unread, limit, filter.as_deref())?;
         }
 
         Commands::Read { id } => {
