@@ -167,6 +167,41 @@ enum Commands {
         /// 既読にする記事の ID
         id: i64,
     },
+
+    /// 記事をお気に入りに追加する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed favorite 1
+    /// ```
+    Favorite {
+        /// お気に入りにする記事の ID
+        id: i64,
+    },
+
+    /// 記事をお気に入りから削除する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed unfavorite 1
+    /// ```
+    Unfavorite {
+        /// お気に入りから削除する記事の ID
+        id: i64,
+    },
+
+    /// お気に入り記事を一覧表示する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed favorites
+    /// rustfeed favorites -l 10  # 10件まで
+    /// ```
+    Favorites {
+        /// 表示する記事数の上限（デフォルト: 20）
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+    },
 }
 
 // =============================================================================
@@ -227,6 +262,18 @@ async fn main() -> Result<()> {
 
         Commands::Read { id } => {
             commands::mark_as_read(&db, id)?;
+        }
+
+        Commands::Favorite { id } => {
+            commands::add_favorite(&db, id)?;
+        }
+
+        Commands::Unfavorite { id } => {
+            commands::remove_favorite(&db, id)?;
+        }
+
+        Commands::Favorites { limit } => {
+            commands::show_favorites(&db, limit)?;
         }
     }
 

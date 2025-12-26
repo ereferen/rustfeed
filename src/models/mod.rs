@@ -196,6 +196,11 @@ pub struct Article {
     /// `bool` は真偽値型で、`true` または `false` のみを取ります。
     pub is_read: bool,
 
+    /// お気に入りフラグ
+    ///
+    /// ユーザーが重要としてマークした記事を示します。
+    pub is_favorite: bool,
+
     /// この記事をデータベースに保存した日時
     pub created_at: DateTime<Utc>,
 }
@@ -241,7 +246,8 @@ impl Article {
             url,
             content,
             published_at,
-            is_read: false, // 新規記事は未読状態で作成
+            is_read: false,     // 新規記事は未読状態で作成
+            is_favorite: false, // 新規記事はお気に入りでない状態で作成
             created_at: Utc::now(),
         }
     }

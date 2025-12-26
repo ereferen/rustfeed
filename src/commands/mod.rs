@@ -161,9 +161,9 @@ pub fn list_feeds(db: &Database) -> Result<()> {
         // フォーマット文字列で整形
         println!(
             "  {} {} {}",
-            format!("[{}]", feed.id).cyan(),         // ID（シアン色）
-            feed.title.bold(),                        // タイトル（太字）
-            format!("({})", feed.url).dimmed()        // URL（薄い色）
+            format!("[{}]", feed.id).cyan(),    // ID（シアン色）
+            feed.title.bold(),                  // タイトル（太字）
+            format!("({})", feed.url).dimmed()  // URL（薄い色）
         );
 
         // 説明があれば表示（最初の80文字まで）
@@ -239,11 +239,7 @@ pub async fn fetch_feeds(db: &Database) -> Result<()> {
                 }
 
                 // 結果表示
-                println!(
-                    "{} ({} new)",
-                    "OK".green(),
-                    new_count.to_string().cyan()
-                );
+                println!("{} ({} new)", "OK".green(), new_count.to_string().cyan());
 
                 total_new += new_count;
             }
@@ -318,7 +314,7 @@ pub fn show_articles(db: &Database, unread_only: bool, limit: usize) -> Result<(
         let read_marker = if article.is_read {
             "[x]".dimmed() // ColoredString 型
         } else {
-            "[*]".cyan()   // ColoredString 型
+            "[*]".cyan() // ColoredString 型
         };
 
         // 日付フォーマット
@@ -366,5 +362,111 @@ pub fn mark_as_read(db: &Database, id: i64) -> Result<()> {
     } else {
         println!("{} {}", "Article not found with ID:".yellow(), id);
     }
+    Ok(())
+}
+
+/// 記事をお気に入りに追加する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `id` - お気に入りにする記事のID
+///
+/// # 結果
+///
+/// - 記事が存在すればお気に入りに追加
+/// - 存在しなければ警告を表示
+pub fn add_favorite(db: &Database, id: i64) -> Result<()> {
+    if db.add_favorite(id)? {
+        println!("{} {}", "Added to favorites:".green(), id);
+    } else {
+        println!("{} {}", "Article not found with ID:".yellow(), id);
+    }
+    Ok(())
+}
+
+/// 記事をお気に入りから削除する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `id` - お気に入りから削除する記事のID
+///
+/// # 結果
+///
+/// - 記事が存在すればお気に入りから削除
+/// - 存在しなければ警告を表示
+pub fn remove_favorite(db: &Database, id: i64) -> Result<()> {
+    if db.remove_favorite(id)? {
+        println!("{} {}", "Removed from favorites:".green(), id);
+    } else {
+        println!("{} {}", "Article not found with ID:".yellow(), id);
+    }
+    Ok(())
+}
+
+/// お気に入り記事を一覧表示する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `limit` - 表示する最大件数
+///
+/// # 出力フォーマット
+///
+/// ```text
+/// Favorite Articles:
+///
+///   [*] [1] 2024-01-01 Article Title
+///       https://example.com/article
+/// ```
+///
+/// - `[*]` = 未読（シアン色）
+/// - `[x]` = 既読（薄い色）
+pub fn show_favorites(db: &Database, limit: usize) -> Result<()> {
+    // お気に入り記事を取得
+    let articles = db.get_favorite_articles(limit)?;
+
+    // 空の場合の処理
+    if articles.is_empty() {
+        println!("{}", "No favorite articles.".yellow());
+        println!("Use 'rustfeed favorite <id>' to add articles to favorites.");
+        return Ok(());
+    }
+
+    // ヘッダー
+    println!("{}", "Favorite Articles:".bold().underline());
+    println!();
+
+    // 各記事を表示
+    for article in articles {
+        // 既読/未読マーカー
+        let read_marker = if article.is_read {
+            "[x]".dimmed()
+        } else {
+            "[*]".cyan()
+        };
+
+        // 日付フォーマット
+        let date = article
+            .published_at
+            .map(|dt| dt.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| "----------".to_string());
+
+        // 記事情報を表示
+        println!(
+            "  {} {} {} {}",
+            read_marker,
+            format!("[{}]", article.id).dimmed(),
+            date.dimmed(),
+            article.title.bold()
+        );
+
+        // URLがあれば表示
+        if let Some(url) = &article.url {
+            println!("      {}", url.dimmed());
+        }
+    }
+
     Ok(())
 }
