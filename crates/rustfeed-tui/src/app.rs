@@ -146,6 +146,13 @@ impl App {
                 // TODO: 非同期でフィード更新を実装
             }
 
+            // 記事をブラウザで開く
+            KeyCode::Char('o') => {
+                if self.focus == Focus::Articles && !self.articles.is_empty() {
+                    self.open_article_in_browser()?;
+                }
+            }
+
             _ => {}
         }
 
@@ -216,6 +223,30 @@ impl App {
                 self.status_message = Some("Added to favorites".to_string());
             }
             self.load_articles_for_selected_feed()?;
+        }
+        Ok(())
+    }
+
+    /// 記事をブラウザで開く
+    fn open_article_in_browser(&mut self) -> Result<()> {
+        if let Some(article) = self.articles.get(self.selected_article) {
+            if let Some(url) = &article.url {
+                match open::that(url) {
+                    Ok(_) => {
+                        self.status_message = Some("Opened in browser".to_string());
+                        // 記事を既読にする
+                        if !article.is_read {
+                            self.db.mark_as_read(article.id)?;
+                            self.load_articles_for_selected_feed()?;
+                        }
+                    }
+                    Err(e) => {
+                        self.status_message = Some(format!("Failed to open: {}", e));
+                    }
+                }
+            } else {
+                self.status_message = Some("Article has no URL".to_string());
+            }
         }
         Ok(())
     }

@@ -162,7 +162,7 @@ fn render_articles(frame: &mut Frame, app: &App, area: Rect) {
 
 /// フッター（ヘルプ）を描画
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let help_text = "q: Quit | j/k: Move | Tab: Switch | r: Toggle Read | f: Toggle Favorite | R: Refresh";
+    let help_text = "q: Quit | j/k: Move | Tab: Switch | r: Read | f: Fav | o: Open | R: Refresh";
 
     let status = if let Some(msg) = &app.status_message {
         format!(" | {}", msg)
