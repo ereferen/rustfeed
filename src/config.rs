@@ -40,8 +40,7 @@ use std::path::PathBuf;
 ///
 /// 設定ファイルが存在しない、または一部の設定が欠けている場合、
 /// `Default` トレイトで定義されたデフォルト値が使用されます。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(default)]
     pub general: GeneralConfig,
@@ -152,7 +151,6 @@ impl Default for DatabaseConfig {
         }
     }
 }
-
 
 // =============================================================================
 // 設定ファイルの読み込み

@@ -253,6 +253,56 @@ enum Commands {
         #[arg(short, long)]
         limit: Option<usize>,
     },
+
+    /// 記事を一括で既読にする
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed mark-all-read                # 全記事を既読にする
+    /// rustfeed mark-all-read --feed 2       # フィード2の記事を既読にする
+    /// rustfeed mark-all-read --before "2025-01-01"  # 指定日付以前を既読にする
+    /// ```
+    MarkAllRead {
+        /// 特定のフィードIDの記事のみを対象
+        #[arg(long)]
+        feed: Option<i64>,
+
+        /// 指定日時以前の記事を既読にする（YYYY-MM-DD形式）
+        #[arg(long)]
+        before: Option<String>,
+    },
+
+    /// 記事を未読に戻す
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed mark-unread 123              # 記事ID 123を未読にする
+    /// rustfeed mark-unread --feed 2         # フィード2の全記事を未読にする
+    /// rustfeed mark-unread --all            # 全記事を未読にする
+    /// ```
+    MarkUnread {
+        /// 未読にする記事のID（--feedまたは--allと排他）
+        id: Option<i64>,
+
+        /// 特定のフィードIDの全記事を未読にする
+        #[arg(long)]
+        feed: Option<i64>,
+
+        /// 全記事を未読にする
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// 記事の既読/未読状態を反転する
+    ///
+    /// # 使用例
+    /// ```bash
+    /// rustfeed toggle-read 123              # 記事ID 123の状態を反転
+    /// ```
+    ToggleRead {
+        /// 反転する記事のID
+        id: i64,
+    },
 }
 
 // =============================================================================
@@ -368,6 +418,18 @@ async fn main() -> Result<()> {
             limit,
         } => {
             commands::export_articles(&db, &format, favorites, unread, limit)?;
+        }
+
+        Commands::MarkAllRead { feed, before } => {
+            commands::mark_all_read(&db, feed, before.as_deref())?;
+        }
+
+        Commands::MarkUnread { id, feed, all } => {
+            commands::mark_unread(&db, id, feed, all)?;
+        }
+
+        Commands::ToggleRead { id } => {
+            commands::toggle_read(&db, id)?;
         }
     }
 

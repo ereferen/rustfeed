@@ -528,6 +528,114 @@ impl Database {
         Ok(affected > 0)
     }
 
+    /// 記事を一括で既読にする（フィルタ付き）
+    ///
+    /// # 引数
+    ///
+    /// * `feed_id` - 特定のフィードのみ対象（None の場合は全フィード）
+    /// * `before_date` - 指定日時以前の記事のみ対象（RFC3339形式、None の場合は全期間）
+    ///
+    /// # 戻り値
+    ///
+    /// 更新された記事の件数
+    pub fn mark_all_read_with_filter(
+        &self,
+        feed_id: Option<i64>,
+        before_date: Option<&str>,
+    ) -> Result<usize> {
+        let affected = match (feed_id, before_date) {
+            (None, None) => {
+                // 全記事を既読に
+                self.conn.execute("UPDATE articles SET is_read = 1", [])?
+            }
+            (Some(id), None) => {
+                // 特定フィードの記事を既読に
+                self.conn.execute(
+                    "UPDATE articles SET is_read = 1 WHERE feed_id = ?1",
+                    params![id],
+                )?
+            }
+            (None, Some(date)) => {
+                // 指定日付以前の記事を既読に
+                self.conn.execute(
+                    "UPDATE articles SET is_read = 1 WHERE published_at < ?1",
+                    params![date],
+                )?
+            }
+            (Some(id), Some(date)) => {
+                // 特定フィードかつ指定日付以前の記事を既読に
+                self.conn.execute(
+                    "UPDATE articles SET is_read = 1 WHERE feed_id = ?1 AND published_at < ?2",
+                    params![id, date],
+                )?
+            }
+        };
+
+        Ok(affected)
+    }
+
+    /// 記事を未読に戻す
+    ///
+    /// # 引数
+    ///
+    /// * `id` - 未読にする記事のID
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(true)`: 更新成功
+    /// - `Ok(false)`: 該当する記事が存在しなかった
+    pub fn mark_as_unread(&self, id: i64) -> Result<bool> {
+        let affected = self
+            .conn
+            .execute("UPDATE articles SET is_read = 0 WHERE id = ?1", params![id])?;
+        Ok(affected > 0)
+    }
+
+    /// フィード単位で記事を未読に戻す
+    ///
+    /// # 引数
+    ///
+    /// * `feed_id` - 対象フィードのID
+    ///
+    /// # 戻り値
+    ///
+    /// 更新された記事の件数
+    pub fn mark_all_unread_by_feed(&self, feed_id: i64) -> Result<usize> {
+        let affected = self.conn.execute(
+            "UPDATE articles SET is_read = 0 WHERE feed_id = ?1",
+            params![feed_id],
+        )?;
+        Ok(affected)
+    }
+
+    /// 全記事を未読に戻す
+    ///
+    /// # 戻り値
+    ///
+    /// 更新された記事の件数
+    pub fn mark_all_unread(&self) -> Result<usize> {
+        let affected = self.conn.execute("UPDATE articles SET is_read = 0", [])?;
+        Ok(affected)
+    }
+
+    /// 記事の既読/未読状態を反転する
+    ///
+    /// # 引数
+    ///
+    /// * `id` - 対象記事のID
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(true)`: 更新成功
+    /// - `Ok(false)`: 該当する記事が存在しなかった
+    pub fn toggle_read_status(&self, id: i64) -> Result<bool> {
+        let affected = self.conn.execute(
+            "UPDATE articles SET is_read = CASE WHEN is_read = 0 THEN 1 ELSE 0 END WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(affected > 0)
+    }
+
     /// 記事をお気に入りに追加する
     ///
     /// # 引数

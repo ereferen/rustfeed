@@ -652,3 +652,125 @@ fn export_as_markdown(articles: &[Article]) -> Result<()> {
 
     Ok(())
 }
+
+// =============================================================================
+// 既読管理コマンド
+// =============================================================================
+
+/// 記事を一括で既読にする
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `feed_id` - 特定のフィードのみ対象（None の場合は全フィード）
+/// * `before_date` - 指定日付以前の記事のみ対象（YYYY-MM-DD形式、None の場合は全期間）
+///
+/// # 例
+///
+/// ```bash
+/// rustfeed mark-all-read                    # 全記事を既読に
+/// rustfeed mark-all-read --feed 2           # フィード2の記事を既読に
+/// rustfeed mark-all-read --before "2025-01-01"  # 2025年以前を既読に
+/// ```
+pub fn mark_all_read(db: &Database, feed_id: Option<i64>, before_date: Option<&str>) -> Result<()> {
+    let count = db.mark_all_read_with_filter(feed_id, before_date)?;
+
+    if count == 0 {
+        println!("{}", "No articles matched the criteria.".yellow());
+    } else {
+        println!(
+            "{} {}",
+            format!("Marked {} article(s) as read.", count).green(),
+            "✓".green().bold()
+        );
+    }
+
+    Ok(())
+}
+
+/// 記事を未読に戻す
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `id` - 未読にする記事のID（None の場合は他のオプションが必要）
+/// * `feed_id` - フィード単位で未読にする場合のフィードID
+/// * `all` - 全記事を未読にする場合 true
+///
+/// # 例
+///
+/// ```bash
+/// rustfeed mark-unread 123           # 記事123を未読に
+/// rustfeed mark-unread --feed 2      # フィード2の全記事を未読に
+/// rustfeed mark-unread --all         # 全記事を未読に
+/// ```
+pub fn mark_unread(db: &Database, id: Option<i64>, feed_id: Option<i64>, all: bool) -> Result<()> {
+    // 引数の検証
+    let options_count = [id.is_some(), feed_id.is_some(), all]
+        .iter()
+        .filter(|&&x| x)
+        .count();
+
+    if options_count == 0 {
+        anyhow::bail!("Please specify either an article ID, --feed, or --all");
+    }
+
+    if options_count > 1 {
+        anyhow::bail!("Please specify only one of: article ID, --feed, or --all");
+    }
+
+    let count = if let Some(article_id) = id {
+        // 単一記事を未読に
+        let success = db.mark_as_unread(article_id)?;
+        if !success {
+            anyhow::bail!("Article not found with ID: {}", article_id);
+        }
+        1
+    } else if let Some(feed) = feed_id {
+        // フィード単位で未読に
+        db.mark_all_unread_by_feed(feed)?
+    } else {
+        // 全記事を未読に
+        db.mark_all_unread()?
+    };
+
+    if count == 0 {
+        println!("{}", "No articles to mark as unread.".yellow());
+    } else {
+        println!(
+            "{} {}",
+            format!("Marked {} article(s) as unread.", count).green(),
+            "✓".green().bold()
+        );
+    }
+
+    Ok(())
+}
+
+/// 記事の既読/未読状態を反転する
+///
+/// # 引数
+///
+/// * `db` - データベース接続
+/// * `id` - 対象記事のID
+///
+/// # 例
+///
+/// ```bash
+/// rustfeed toggle-read 123    # 記事123の状態を反転
+/// ```
+pub fn toggle_read(db: &Database, id: i64) -> Result<()> {
+    let success = db.toggle_read_status(id)?;
+
+    if !success {
+        anyhow::bail!("Article not found with ID: {}", id);
+    }
+
+    println!(
+        "{} {}",
+        format!("Toggled read status for article {}.", id).green(),
+        "✓".green().bold()
+    );
+
+    Ok(())
+}
