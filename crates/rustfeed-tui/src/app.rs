@@ -3,7 +3,7 @@
 //! TUIアプリケーションの状態とメインループを管理します。
 
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{prelude::*, Terminal};
 use rustfeed_core::{config::AppConfig, db::Database, Article, Feed};
 use std::time::Duration;
@@ -75,6 +75,14 @@ impl App {
                 if let Event::Key(key) = event::read()? {
                     // KeyEventKind::Press のみ処理（リピートを防ぐ）
                     if key.kind == KeyEventKind::Press {
+                        // Ctrl+L で画面をリフレッシュ
+                        if key.modifiers.contains(KeyModifiers::CONTROL)
+                            && key.code == KeyCode::Char('l')
+                        {
+                            terminal.clear()?;
+                            self.status_message = Some("Screen refreshed".to_string());
+                            continue;
+                        }
                         self.handle_key(key.code).await?;
                     }
                 }
@@ -256,8 +264,11 @@ impl App {
         // WSL環境かどうかを検出
         if Self::is_wsl() {
             // WSLの場合はcmd.exeを使用してWindowsブラウザで開く
+            // stdout/stderrを抑制して画面の乱れを防ぐ
             std::process::Command::new("cmd.exe")
                 .args(["/C", "start", "", url])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
                 .spawn()?;
             Ok(())
         } else {
