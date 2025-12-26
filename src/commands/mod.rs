@@ -270,6 +270,8 @@ pub async fn fetch_feeds(db: &Database) -> Result<()> {
 /// * `unread_only` - true なら未読記事のみ表示
 /// * `limit` - 表示する最大件数
 /// * `filter` - キーワードフィルタ（カンマ区切りで複数指定可能）
+/// * `feed_id` - 特定のフィードIDでフィルタ（None の場合は全フィード）
+/// * `disabled_feeds` - 無効化するフィードIDのリスト
 ///
 /// # 出力フォーマット
 ///
@@ -289,9 +291,16 @@ pub fn show_articles(
     unread_only: bool,
     limit: usize,
     filter: Option<&str>,
+    feed_id: Option<i64>,
+    disabled_feeds: &[i64],
 ) -> Result<()> {
     // 記事を取得
-    let articles = db.get_articles(unread_only, limit, filter)?;
+    let mut articles = db.get_articles(unread_only, limit, filter, feed_id)?;
+
+    // disabled_feedsでフィルタリング（feed_idが指定されていない場合のみ）
+    if feed_id.is_none() && !disabled_feeds.is_empty() {
+        articles.retain(|article| !disabled_feeds.contains(&article.feed_id));
+    }
 
     // 空の場合の処理
     if articles.is_empty() {
@@ -543,7 +552,7 @@ pub fn export_articles(
     } else {
         // 通常の記事を取得
         let limit_val = limit.unwrap_or(usize::MAX);
-        db.get_articles(unread, limit_val, None)?
+        db.get_articles(unread, limit_val, None, None)?
     };
 
     // 空の場合の処理

@@ -401,6 +401,7 @@ impl Database {
     /// * `unread_only` - true なら未読記事のみ取得
     /// * `limit` - 取得する最大件数
     /// * `filter` - キーワードフィルタ（カンマ区切りで複数指定可能、OR条件）
+    /// * `feed_id` - 特定のフィードIDでフィルタ（None の場合は全フィード）
     ///
     /// # 戻り値
     ///
@@ -416,6 +417,7 @@ impl Database {
         unread_only: bool,
         limit: usize,
         filter: Option<&str>,
+        feed_id: Option<i64>,
     ) -> Result<Vec<Article>> {
         // ベースとなるSQLクエリ
         let mut sql = String::from(
@@ -429,6 +431,11 @@ impl Database {
         // 未読フィルタ
         if unread_only {
             conditions.push("is_read = 0".to_string());
+        }
+
+        // フィードIDフィルタ
+        if feed_id.is_some() {
+            conditions.push("feed_id = ?".to_string());
         }
 
         // キーワードフィルタ
@@ -460,6 +467,11 @@ impl Database {
 
         // パラメータを準備
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        // フィードIDパラメータを追加
+        if let Some(id) = feed_id {
+            params.push(Box::new(id));
+        }
 
         // キーワードフィルタのパラメータを追加
         if let Some(filter_str) = filter {

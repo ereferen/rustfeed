@@ -41,6 +41,10 @@ colored = "2"
 # ホームディレクトリ取得
 dirs = "5"
 
+# 設定ファイル管理
+config = "0.14"
+toml = "0.8"
+
 [dev-dependencies]
 # テスト用
 tokio-test = "0.4"

@@ -40,6 +40,7 @@
 // これにより、同名のファイル（例: commands/mod.rs）が読み込まれます。
 
 mod commands;
+mod config;
 mod db;
 mod feed;
 mod models;
@@ -147,16 +148,17 @@ enum Commands {
     /// rustfeed articles --unread           # 未読のみ
     /// rustfeed articles -l 10              # 10件まで
     /// rustfeed articles --filter "rust"    # キーワードでフィルタ
-    /// rustfeed articles --filter "rust,cargo" --unread  # 複数キーワード、未読のみ
+    /// rustfeed articles --feed 2           # フィードID 2の記事のみ
+    /// rustfeed articles --filter "rust,cargo" --unread --feed 2  # 複合フィルタ
     /// ```
     Articles {
         /// 未読記事のみを表示するフラグ
         #[arg(short, long)]
         unread: bool,
 
-        /// 表示する記事数の上限（デフォルト: 20）
-        #[arg(short, long, default_value = "20")]
-        limit: usize,
+        /// 表示する記事数の上限（指定しない場合は設定ファイルのデフォルト値）
+        #[arg(short, long)]
+        limit: Option<usize>,
 
         /// キーワードフィルタ（カンマ区切りで複数指定可能、OR条件）
         ///
@@ -164,6 +166,13 @@ enum Commands {
         /// 複数のキーワードをカンマで区切って指定すると、いずれかを含む記事を表示します。
         #[arg(short, long)]
         filter: Option<String>,
+
+        /// 特定のフィードIDの記事のみを表示
+        ///
+        /// 指定したフィードIDの記事のみを表示します。
+        /// フィードIDは `rustfeed list` コマンドで確認できます。
+        #[arg(long)]
+        feed: Option<i64>,
     },
 
     /// 記事を既読としてマークする
@@ -275,6 +284,10 @@ async fn main() -> Result<()> {
     // データベーステーブルを初期化（存在しない場合は作成）
     db.init()?;
 
+    // 設定ファイルを読み込む
+    // ファイルが存在しない場合はデフォルト値を使用
+    let config = config::AppConfig::load()?;
+
     // パターンマッチングでサブコマンドを処理
     // Rust の match は網羅的（exhaustive）: 全てのケースを処理する必要がある
     match cli.command {
@@ -302,8 +315,34 @@ async fn main() -> Result<()> {
             unread,
             limit,
             filter,
+            feed,
         } => {
-            commands::show_articles(&db, unread, limit, filter.as_deref())?;
+            // limitが指定されていない場合、設定ファイルのデフォルト値を使用
+            let limit_val = limit.unwrap_or(config.general.default_limit);
+
+            // disabled_feedsを適用
+            // ユーザーが特定のフィードを指定している場合は、disabled_feedsを無視
+            let final_feed = if feed.is_some() {
+                feed
+            } else if !config.general.disabled_feeds.is_empty() {
+                // disabled_feedsが設定されている場合、それらを除外するために
+                // show_articles関数にdisabled_feedsを渡す
+                // ただし、現在の実装ではfeedは単一のi64なので、
+                // disabled_feedsを適用するにはshow_articles関数を変更する必要がある
+                // 今はシンプルに、feedがNoneの場合のみdisabled_feedsを考慮する
+                feed
+            } else {
+                feed
+            };
+
+            commands::show_articles(
+                &db,
+                unread,
+                limit_val,
+                filter.as_deref(),
+                final_feed,
+                &config.general.disabled_feeds,
+            )?;
         }
 
         Commands::Read { id } => {
