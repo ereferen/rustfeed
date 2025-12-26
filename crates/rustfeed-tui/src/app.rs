@@ -231,7 +231,7 @@ impl App {
     fn open_article_in_browser(&mut self) -> Result<()> {
         if let Some(article) = self.articles.get(self.selected_article) {
             if let Some(url) = &article.url {
-                match open::that(url) {
+                match Self::open_url(url) {
                     Ok(_) => {
                         self.status_message = Some("Opened in browser".to_string());
                         // 記事を既読にする
@@ -249,5 +249,28 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    /// URLをブラウザで開く（WSL対応）
+    fn open_url(url: &str) -> std::io::Result<()> {
+        // WSL環境かどうかを検出
+        if Self::is_wsl() {
+            // WSLの場合はcmd.exeを使用してWindowsブラウザで開く
+            std::process::Command::new("cmd.exe")
+                .args(["/C", "start", "", url])
+                .spawn()?;
+            Ok(())
+        } else {
+            // 通常環境ではopen crateを使用
+            open::that(url)
+        }
+    }
+
+    /// WSL環境かどうかを検出
+    fn is_wsl() -> bool {
+        // /proc/versionにMicrosoftまたはWSLが含まれているか確認
+        std::fs::read_to_string("/proc/version")
+            .map(|v| v.to_lowercase().contains("microsoft") || v.to_lowercase().contains("wsl"))
+            .unwrap_or(false)
     }
 }
