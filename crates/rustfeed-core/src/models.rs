@@ -46,7 +46,7 @@ use serde::{Deserialize, Serialize};
 /// # 例
 ///
 /// ```rust
-/// use rustfeed::models::Feed;
+/// use rustfeed_core::models::Feed;
 ///
 /// let feed = Feed::new(
 ///     "https://example.com/feed.xml".to_string(),
@@ -129,6 +129,8 @@ impl Feed {
     /// # 例
     ///
     /// ```rust
+    /// use rustfeed_core::models::Feed;
+    ///
     /// let feed = Feed::new(
     ///     "https://example.com/feed".to_string(),
     ///     "My Feed".to_string(),
@@ -151,6 +153,14 @@ impl Feed {
             category: None,    // デフォルトはNone（カテゴリなし）
             priority: 0,       // デフォルト優先順位は0
         }
+    }
+
+    /// 表示名を取得する
+    ///
+    /// カスタム名が設定されている場合はそれを返し、
+    /// そうでなければタイトルを返します。
+    pub fn display_name(&self) -> &str {
+        self.custom_name.as_deref().unwrap_or(&self.title)
     }
 }
 
@@ -176,6 +186,9 @@ impl Feed {
 /// # 例
 ///
 /// ```rust
+/// use rustfeed_core::models::Article;
+/// use chrono::Utc;
+///
 /// let article = Article::new(
 ///     1, // feed_id
 ///     "New Rust Release".to_string(),
@@ -245,6 +258,8 @@ impl Article {
     /// # 例
     ///
     /// ```rust
+    /// use rustfeed_core::models::Article;
+    ///
     /// let article = Article::new(
     ///     1,
     ///     "Title".to_string(),

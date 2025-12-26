@@ -1,50 +1,43 @@
-[package]
-name = "rustfeed"
-version = "0.1.0"
+[workspace]
+resolver = "2"
+members = [
+    "crates/rustfeed-core",
+    "crates/rustfeed-cli",
+    "crates/rustfeed-tui",
+]
+
+[workspace.package]
+version = "0.5.0"
 edition = "2021"
 authors = ["ereferen"]
-description = "A CLI RSS reader written in Rust"
 repository = "https://github.com/ereferen/rustfeed"
 license = "MIT"
-readme = "README.md"
 
-[dependencies]
-# CLI引数パーサー
-clap = { version = "4", features = ["derive"] }
-
-# 非同期ランタイム
+[workspace.dependencies]
+# 共有依存関係
 tokio = { version = "1", features = ["full"] }
-
-# HTTPクライアント
 reqwest = { version = "0.11", features = ["json"] }
-
-# RSSパーサー
 feed-rs = "1"
-
-# SQLite（データ永続化）
 rusqlite = { version = "0.31", features = ["bundled"] }
-
-# 日時処理
 chrono = { version = "0.4", features = ["serde"] }
-
-# エラーハンドリング
 anyhow = "1"
 thiserror = "1"
-
-# シリアライズ
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-# ターミナル出力の装飾
-colored = "2"
-
-# ホームディレクトリ取得
 dirs = "5"
-
-# 設定ファイル管理
 config = "0.14"
 toml = "0.8"
 
-[dev-dependencies]
+# CLI用
+clap = { version = "4", features = ["derive"] }
+colored = "2"
+
+# TUI用
+ratatui = "0.29"
+crossterm = "0.28"
+
 # テスト用
 tokio-test = "0.4"
+
+# 内部クレート
+rustfeed-core = { path = "crates/rustfeed-core" }

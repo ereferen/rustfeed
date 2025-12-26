@@ -171,8 +171,10 @@ impl AppConfig {
     ///
     /// # 例
     ///
-    /// ```rust
-    /// let config = AppConfig::load()?;
+    /// ```rust,no_run
+    /// use rustfeed_core::config::AppConfig;
+    ///
+    /// let config = AppConfig::load().expect("Failed to load config");
     /// println!("Default limit: {}", config.general.default_limit);
     /// ```
     pub fn load() -> Result<Self> {
@@ -222,6 +224,8 @@ impl AppConfig {
     /// # 例
     ///
     /// ```rust
+    /// use rustfeed_core::config::AppConfig;
+    ///
     /// println!("{}", AppConfig::sample_config());
     /// ```
     pub fn sample_config() -> &'static str {

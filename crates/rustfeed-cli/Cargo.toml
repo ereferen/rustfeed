@@ -1,0 +1,21 @@
+[package]
+name = "rustfeed-cli"
+description = "CLI interface for rustfeed - RSS feed reader"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rustfeed"
+path = "src/main.rs"
+
+[dependencies]
+rustfeed-core = { workspace = true }
+tokio = { workspace = true }
+clap = { workspace = true }
+colored = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }

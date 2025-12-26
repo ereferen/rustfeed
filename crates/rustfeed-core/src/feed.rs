@@ -14,7 +14,7 @@
 //! ## 使用例
 //!
 //! ```rust,no_run
-//! use rustfeed::feed::fetch_feed;
+//! use rustfeed_core::feed::fetch_feed;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -66,7 +66,7 @@ use crate::models::{Article, Feed};
 /// # 例
 ///
 /// ```rust,no_run
-/// # use rustfeed::feed::fetch_feed;
+/// # use rustfeed_core::feed::fetch_feed;
 /// # async fn example() -> anyhow::Result<()> {
 /// let (feed, articles) = fetch_feed("https://example.com/feed.xml").await?;
 ///

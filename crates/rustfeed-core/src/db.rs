@@ -17,13 +17,14 @@
 //! ## 使用例
 //!
 //! ```rust,no_run
-//! use rustfeed::db::Database;
+//! use rustfeed_core::db::Database;
 //!
 //! let db = Database::new()?;
 //! db.init()?;
 //!
 //! // フィード一覧を取得
-//! let feeds = db.get_feeds()?;
+//! let feeds = db.get_feeds(None)?;
+//! # Ok::<(), anyhow::Error>(())
 //! ```
 
 use anyhow::{Context, Result};
@@ -321,8 +322,8 @@ impl Database {
         // 全件取得してRustコードでフィルタリング
         // プリペアドステートメントを作成
         let mut stmt = self.conn.prepare(
-            "SELECT id, url, title, description, created_at, updated_at, custom_name, category, priority 
-             FROM feeds 
+            "SELECT id, url, title, description, created_at, updated_at, custom_name, category, priority
+             FROM feeds
              ORDER BY priority DESC, id",
         )?;
 
@@ -372,10 +373,9 @@ impl Database {
     ///
     /// `Option<T>` は「値が存在するかもしれない」ことを型で表現します。
     /// これにより、nullチェックを忘れるバグを防ぎます。
-    #[allow(dead_code)] // 現在未使用だが将来使用予定
     pub fn get_feed(&self, id: i64) -> Result<Option<Feed>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, url, title, description, created_at, updated_at, custom_name, category, priority 
+            "SELECT id, url, title, description, created_at, updated_at, custom_name, category, priority
              FROM feeds WHERE id = ?1",
         )?;
 
@@ -406,7 +406,7 @@ impl Database {
     /// * `custom_name` - 設定するカスタム名（NULLの場合は元のtitleが使われる）
     ///
     /// # 使用例
-    /// ```
+    /// ```ignore
     /// db.rename_feed(1, Some("My Tech Blog"))?;
     /// db.rename_feed(2, None)?;  // カスタム名をクリア
     /// ```
@@ -816,6 +816,66 @@ impl Database {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(articles)
+    }
+
+    /// 記事のIDで記事を取得する
+    ///
+    /// # 引数
+    ///
+    /// * `id` - 取得する記事のID
+    ///
+    /// # 戻り値
+    ///
+    /// - `Ok(Some(article))`: 記事が見つかった
+    /// - `Ok(None)`: 記事が見つからなかった
+    pub fn get_article(&self, id: i64) -> Result<Option<Article>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, feed_id, title, url, content, published_at, is_read, is_favorite, created_at
+             FROM articles WHERE id = ?1",
+        )?;
+
+        let mut rows = stmt.query(params![id])?;
+
+        if let Some(row) = rows.next()? {
+            Ok(Some(Article {
+                id: row.get(0)?,
+                feed_id: row.get(1)?,
+                title: row.get(2)?,
+                url: row.get(3)?,
+                content: row.get(4)?,
+                published_at: row.get::<_, Option<String>>(5)?.map(parse_datetime),
+                is_read: row.get::<_, i32>(6)? != 0,
+                is_favorite: row.get::<_, i32>(7)? != 0,
+                created_at: parse_datetime(row.get::<_, String>(8)?),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// フィードIDで記事数を取得する
+    ///
+    /// # 引数
+    ///
+    /// * `feed_id` - フィードのID
+    ///
+    /// # 戻り値
+    ///
+    /// (総記事数, 未読記事数)
+    pub fn get_article_counts(&self, feed_id: i64) -> Result<(usize, usize)> {
+        let total: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM articles WHERE feed_id = ?1",
+            params![feed_id],
+            |row| row.get(0),
+        )?;
+
+        let unread: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM articles WHERE feed_id = ?1 AND is_read = 0",
+            params![feed_id],
+            |row| row.get(0),
+        )?;
+
+        Ok((total as usize, unread as usize))
     }
 }
 

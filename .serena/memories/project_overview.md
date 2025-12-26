@@ -28,9 +28,14 @@ Phase 1 (MVP) completed ✅. Phase 2 completed ✅:
   - ✅ Export to various formats (JSON/Markdown)
   - ✅ Configuration file support
   - ✅ Feed filtering (--feed flag, disabled_feeds)
+  - ✅ Read management (batch mark, unread, toggle)
+  - ✅ Feed management (rename, update-url, categories, priority, info)
+  - ✅ Date filtering (--after, --before, --last-days, --last-weeks)
+  - ✅ Basic search command
 - Phase 3 (Planned): 
-  - ⏳ TUI (Terminal UI)
-  - ⏳ Tauri GUI (optional)
+  - ⏳ TUI (Terminal UI) - Issue #3, #9
+  - ⏳ Notification features - Issue #13
+  - ⏳ Advanced search (FTS5, saved searches) - Issue #12 残り
 
 ## Recent Updates
 - **2025-12-26 - Issue #12 (Partial)**: Article Search Features

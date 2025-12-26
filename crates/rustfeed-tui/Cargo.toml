@@ -1,0 +1,20 @@
+[package]
+name = "rustfeed-tui"
+description = "TUI interface for rustfeed - RSS feed reader"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rustfeed-tui"
+path = "src/main.rs"
+
+[dependencies]
+rustfeed-core = { workspace = true }
+tokio = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
