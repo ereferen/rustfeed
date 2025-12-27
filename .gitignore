@@ -1,1 +1,5 @@
 /target
+
+# Claude Code個人設定（Git管理しない）
+CLAUDE.local.md
+.claude/settings.local.json
