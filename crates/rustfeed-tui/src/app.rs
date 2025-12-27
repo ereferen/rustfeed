@@ -39,6 +39,10 @@ pub struct App {
     pub selected_article: usize,
     /// ステータスメッセージ
     pub status_message: Option<String>,
+    /// フィードリストの表示可能行数（スクロール計算用）
+    pub feeds_list_height: u16,
+    /// 記事リストの表示可能行数（スクロール計算用）
+    pub articles_list_height: u16,
 }
 
 impl App {
@@ -61,13 +65,15 @@ impl App {
             articles,
             selected_article: 0,
             status_message: None,
+            feeds_list_height: 10,    // 初期値、UIで更新される
+            articles_list_height: 10, // 初期値、UIで更新される
         })
     }
 
     /// メインループを実行
     pub async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         loop {
-            // 画面を描画
+            // 画面を描画（リスト高さの更新のため可変参照）
             terminal.draw(|frame| ui::render(frame, self))?;
 
             // イベントをポーリング（100msタイムアウト）
@@ -83,7 +89,7 @@ impl App {
                             self.status_message = Some("Screen refreshed".to_string());
                             continue;
                         }
-                        self.handle_key(key.code).await?;
+                        self.handle_key(key.code, key.modifiers).await?;
                     }
                 }
             }
@@ -98,7 +104,7 @@ impl App {
     }
 
     /// キー入力を処理
-    async fn handle_key(&mut self, key: KeyCode) -> Result<()> {
+    async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) -> Result<()> {
         match key {
             // 終了
             KeyCode::Char('q') => {
@@ -111,6 +117,36 @@ impl App {
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.move_down();
+            }
+
+            // ページ単位移動
+            KeyCode::PageUp => {
+                self.page_up();
+            }
+            KeyCode::PageDown => {
+                self.page_down();
+            }
+
+            // 半ページ移動 (Ctrl+u/d)
+            KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.half_page_up();
+            }
+            KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.half_page_down();
+            }
+
+            // 先頭/末尾へジャンプ
+            KeyCode::Char('g') => {
+                self.jump_to_top();
+            }
+            KeyCode::Char('G') => {
+                self.jump_to_bottom();
+            }
+            KeyCode::Home => {
+                self.jump_to_top();
+            }
+            KeyCode::End => {
+                self.jump_to_bottom();
             }
 
             // 左右でフォーカス切り替え
@@ -197,6 +233,101 @@ impl App {
                 if self.selected_article < self.articles.len().saturating_sub(1) {
                     self.selected_article += 1;
                 }
+            }
+        }
+    }
+
+    /// ページアップ（リスト高さ分上に移動）
+    fn page_up(&mut self) {
+        match self.focus {
+            Focus::Feeds => {
+                let page_size = self.feeds_list_height.saturating_sub(2) as usize;
+                self.selected_feed = self.selected_feed.saturating_sub(page_size);
+                let _ = self.load_articles_for_selected_feed();
+            }
+            Focus::Articles => {
+                let page_size = self.articles_list_height.saturating_sub(2) as usize;
+                self.selected_article = self.selected_article.saturating_sub(page_size);
+            }
+        }
+    }
+
+    /// ページダウン（リスト高さ分下に移動）
+    fn page_down(&mut self) {
+        match self.focus {
+            Focus::Feeds => {
+                let page_size = self.feeds_list_height.saturating_sub(2) as usize;
+                let max_index = self.feeds.len().saturating_sub(1);
+                self.selected_feed = (self.selected_feed + page_size).min(max_index);
+                let _ = self.load_articles_for_selected_feed();
+            }
+            Focus::Articles => {
+                let page_size = self.articles_list_height.saturating_sub(2) as usize;
+                let max_index = self.articles.len().saturating_sub(1);
+                self.selected_article = (self.selected_article + page_size).min(max_index);
+            }
+        }
+    }
+
+    /// 半ページアップ
+    fn half_page_up(&mut self) {
+        match self.focus {
+            Focus::Feeds => {
+                let half_page = (self.feeds_list_height.saturating_sub(2) / 2) as usize;
+                self.selected_feed = self.selected_feed.saturating_sub(half_page.max(1));
+                let _ = self.load_articles_for_selected_feed();
+            }
+            Focus::Articles => {
+                let half_page = (self.articles_list_height.saturating_sub(2) / 2) as usize;
+                self.selected_article = self.selected_article.saturating_sub(half_page.max(1));
+            }
+        }
+    }
+
+    /// 半ページダウン
+    fn half_page_down(&mut self) {
+        match self.focus {
+            Focus::Feeds => {
+                let half_page = (self.feeds_list_height.saturating_sub(2) / 2) as usize;
+                let max_index = self.feeds.len().saturating_sub(1);
+                self.selected_feed = (self.selected_feed + half_page.max(1)).min(max_index);
+                let _ = self.load_articles_for_selected_feed();
+            }
+            Focus::Articles => {
+                let half_page = (self.articles_list_height.saturating_sub(2) / 2) as usize;
+                let max_index = self.articles.len().saturating_sub(1);
+                self.selected_article = (self.selected_article + half_page.max(1)).min(max_index);
+            }
+        }
+    }
+
+    /// 先頭へジャンプ
+    fn jump_to_top(&mut self) {
+        match self.focus {
+            Focus::Feeds => {
+                if self.selected_feed != 0 {
+                    self.selected_feed = 0;
+                    let _ = self.load_articles_for_selected_feed();
+                }
+            }
+            Focus::Articles => {
+                self.selected_article = 0;
+            }
+        }
+    }
+
+    /// 末尾へジャンプ
+    fn jump_to_bottom(&mut self) {
+        match self.focus {
+            Focus::Feeds => {
+                let max_index = self.feeds.len().saturating_sub(1);
+                if self.selected_feed != max_index {
+                    self.selected_feed = max_index;
+                    let _ = self.load_articles_for_selected_feed();
+                }
+            }
+            Focus::Articles => {
+                self.selected_article = self.articles.len().saturating_sub(1);
             }
         }
     }

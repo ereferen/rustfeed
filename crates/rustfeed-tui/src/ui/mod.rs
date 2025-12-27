@@ -6,14 +6,17 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{
+        Block, Borders, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation,
+        ScrollbarState,
+    },
     Frame,
 };
 
 use crate::app::{App, Focus};
 
 /// メイン描画関数
-pub fn render(frame: &mut Frame, app: &App) {
+pub fn render(frame: &mut Frame, app: &mut App) {
     // レイアウトを作成（縦に3分割：ヘッダー、メイン、フッター）
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -35,6 +38,10 @@ pub fn render(frame: &mut Frame, app: &App) {
             Constraint::Percentage(70), // 記事一覧
         ])
         .split(chunks[1]);
+
+    // リスト高さを更新（ボーダー分を引いた内部の高さ）
+    app.feeds_list_height = main_chunks[0].height;
+    app.articles_list_height = main_chunks[1].height;
 
     // フィード一覧を描画
     render_feeds(frame, app, main_chunks[0]);
@@ -93,6 +100,30 @@ fn render_feeds(frame: &mut Frame, app: &App, area: Rect) {
     state.select(Some(app.selected_feed));
 
     frame.render_stateful_widget(feeds_list, area, &mut state);
+
+    // スクロールバーを描画（アイテムが表示領域より多い場合のみ）
+    let visible_height = area.height.saturating_sub(2) as usize; // ボーダー分を引く
+    if app.feeds.len() > visible_height {
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"))
+            .track_symbol(Some("│"))
+            .thumb_symbol("█");
+
+        let mut scrollbar_state = ScrollbarState::new(app.feeds.len())
+            .position(app.selected_feed)
+            .viewport_content_length(visible_height);
+
+        // スクロールバーの描画領域（ボーダーの内側）
+        let scrollbar_area = Rect {
+            x: area.x + area.width - 1,
+            y: area.y + 1,
+            width: 1,
+            height: area.height.saturating_sub(2),
+        };
+
+        frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+    }
 }
 
 /// 記事一覧を描画
@@ -158,11 +189,35 @@ fn render_articles(frame: &mut Frame, app: &App, area: Rect) {
     state.select(Some(app.selected_article));
 
     frame.render_stateful_widget(articles_list, area, &mut state);
+
+    // スクロールバーを描画（アイテムが表示領域より多い場合のみ）
+    let visible_height = area.height.saturating_sub(2) as usize; // ボーダー分を引く
+    if app.articles.len() > visible_height {
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"))
+            .track_symbol(Some("│"))
+            .thumb_symbol("█");
+
+        let mut scrollbar_state = ScrollbarState::new(app.articles.len())
+            .position(app.selected_article)
+            .viewport_content_length(visible_height);
+
+        // スクロールバーの描画領域（ボーダーの内側）
+        let scrollbar_area = Rect {
+            x: area.x + area.width - 1,
+            y: area.y + 1,
+            width: 1,
+            height: area.height.saturating_sub(2),
+        };
+
+        frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+    }
 }
 
 /// フッター（ヘルプ）を描画
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let help_text = "q: Quit | j/k: Move | Tab: Switch | r: Read | f: Fav | o: Open | ^L: Redraw";
+    let help_text = "q:Quit j/k:Move g/G:Top/End PgUp/Dn ^u/d:Half Tab:Switch r:Read f:Fav o:Open";
 
     let status = if let Some(msg) = &app.status_message {
         format!(" | {}", msg)
