@@ -43,6 +43,14 @@ pub struct App {
     pub feeds_list_height: u16,
     /// 記事リストの表示可能行数（スクロール計算用）
     pub articles_list_height: u16,
+    /// プレビューモードが有効かどうか
+    pub show_preview: bool,
+    /// プレビューのスクロール位置
+    pub preview_scroll: usize,
+    /// プレビュー用のテキスト（HTMLから変換済み）
+    pub preview_content: Vec<String>,
+    /// プレビュー画面の表示可能行数
+    pub preview_height: u16,
 }
 
 impl App {
@@ -67,6 +75,10 @@ impl App {
             status_message: None,
             feeds_list_height: 10,    // 初期値、UIで更新される
             articles_list_height: 10, // 初期値、UIで更新される
+            show_preview: false,
+            preview_scroll: 0,
+            preview_content: Vec::new(),
+            preview_height: 10,       // 初期値、UIで更新される
         })
     }
 
@@ -105,6 +117,11 @@ impl App {
 
     /// キー入力を処理
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) -> Result<()> {
+        // プレビューモード時は専用のキー処理
+        if self.show_preview {
+            return self.handle_preview_key(key, modifiers);
+        }
+
         match key {
             // 終了
             KeyCode::Char('q') => {
@@ -194,6 +211,13 @@ impl App {
             KeyCode::Char('o') => {
                 if self.focus == Focus::Articles && !self.articles.is_empty() {
                     self.open_article_in_browser()?;
+                }
+            }
+
+            // プレビュー表示
+            KeyCode::Char('p') => {
+                if self.focus == Focus::Articles && !self.articles.is_empty() {
+                    self.open_preview();
                 }
             }
 
@@ -420,5 +444,94 @@ impl App {
         std::fs::read_to_string("/proc/version")
             .map(|v| v.to_lowercase().contains("microsoft") || v.to_lowercase().contains("wsl"))
             .unwrap_or(false)
+    }
+
+
+    /// プレビューを開く
+    fn open_preview(&mut self) {
+        if let Some(article) = self.articles.get(self.selected_article) {
+            // HTMLコンテンツをテキストに変換
+            let content = article.content.as_deref().unwrap_or("(No content available)");
+            let text = html2text::from_read(content.as_bytes(), 80);
+            
+            // 行ごとに分割して保存
+            self.preview_content = text.lines().map(|s| s.to_string()).collect();
+            self.preview_scroll = 0;
+            self.show_preview = true;
+        }
+    }
+
+    /// プレビューを閉じる
+    fn close_preview(&mut self) {
+        self.show_preview = false;
+        self.preview_content.clear();
+        self.preview_scroll = 0;
+    }
+
+    /// プレビューモード時のキー処理
+    fn handle_preview_key(&mut self, key: KeyCode, modifiers: KeyModifiers) -> Result<()> {
+        match key {
+            // プレビューを閉じる
+            KeyCode::Esc | KeyCode::Char('p') | KeyCode::Char('q') => {
+                self.close_preview();
+            }
+
+            // スクロール
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.preview_scroll_up(1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.preview_scroll_down(1);
+            }
+
+            // ページ単位スクロール
+            KeyCode::PageUp => {
+                let page_size = self.preview_height.saturating_sub(4) as usize;
+                self.preview_scroll_up(page_size);
+            }
+            KeyCode::PageDown => {
+                let page_size = self.preview_height.saturating_sub(4) as usize;
+                self.preview_scroll_down(page_size);
+            }
+
+            // 半ページスクロール
+            KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
+                let half_page = (self.preview_height.saturating_sub(4) / 2) as usize;
+                self.preview_scroll_up(half_page.max(1));
+            }
+            KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
+                let half_page = (self.preview_height.saturating_sub(4) / 2) as usize;
+                self.preview_scroll_down(half_page.max(1));
+            }
+
+            // 先頭/末尾へ
+            KeyCode::Char('g') | KeyCode::Home => {
+                self.preview_scroll = 0;
+            }
+            KeyCode::Char('G') | KeyCode::End => {
+                let visible_height = self.preview_height.saturating_sub(4) as usize;
+                self.preview_scroll = self.preview_content.len().saturating_sub(visible_height);
+            }
+
+            // ブラウザで開く
+            KeyCode::Char('o') => {
+                self.open_article_in_browser()?;
+            }
+
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// プレビューを上にスクロール
+    fn preview_scroll_up(&mut self, lines: usize) {
+        self.preview_scroll = self.preview_scroll.saturating_sub(lines);
+    }
+
+    /// プレビューを下にスクロール
+    fn preview_scroll_down(&mut self, lines: usize) {
+        let visible_height = self.preview_height.saturating_sub(4) as usize;
+        let max_scroll = self.preview_content.len().saturating_sub(visible_height);
+        self.preview_scroll = (self.preview_scroll + lines).min(max_scroll);
     }
 }

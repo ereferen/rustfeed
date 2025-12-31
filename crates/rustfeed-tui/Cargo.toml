@@ -19,3 +19,4 @@ crossterm = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 open = { workspace = true }
+html2text = { workspace = true }

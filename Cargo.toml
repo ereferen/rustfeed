@@ -36,6 +36,7 @@ colored = "2"
 ratatui = "0.29"
 crossterm = "0.28"
 open = "5"
+html2text = "0.12"
 
 # テスト用
 tokio-test = "0.4"

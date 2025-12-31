@@ -7,8 +7,8 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, Borders, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation,
-        ScrollbarState,
+        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Wrap,
     },
     Frame,
 };
@@ -17,6 +17,11 @@ use crate::app::{App, Focus};
 
 /// メイン描画関数
 pub fn render(frame: &mut Frame, app: &mut App) {
+    // プレビューモードの場合はオーバーレイを描画
+    if app.show_preview {
+        render_preview(frame, app);
+        return;
+    }
     // レイアウトを作成（縦に3分割：ヘッダー、メイン、フッター）
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -217,7 +222,7 @@ fn render_articles(frame: &mut Frame, app: &App, area: Rect) {
 
 /// フッター（ヘルプ）を描画
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let help_text = "q:Quit j/k:Move g/G:Top/End PgUp/Dn ^u/d:Half Tab:Switch r:Read f:Fav o:Open";
+    let help_text = "q:Quit j/k:Move g/G:Top/End ^u/d:Half Tab:Switch r:Read f:Fav o:Open p:Preview";
 
     let status = if let Some(msg) = &app.status_message {
         format!(" | {}", msg)
@@ -230,4 +235,102 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
         .block(Block::default().borders(Borders::ALL));
 
     frame.render_widget(footer, area);
+}
+
+
+/// プレビュー画面を描画（オーバーレイ）
+fn render_preview(frame: &mut Frame, app: &mut App) {
+    let area = frame.area();
+
+    // 背景をクリア
+    frame.render_widget(Clear, area);
+
+    // レイアウト：タイトル、コンテンツ、フッター
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // タイトル
+            Constraint::Min(0),    // コンテンツ
+            Constraint::Length(3), // フッター
+        ])
+        .split(area);
+
+    // プレビュー高さを更新
+    app.preview_height = chunks[1].height;
+
+    // 選択中の記事を取得
+    let article = match app.articles.get(app.selected_article) {
+        Some(a) => a,
+        None => return,
+    };
+
+    // タイトルバー
+    let title = format!(" {} ", article.title);
+    let title_paragraph = Paragraph::new(title)
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
+    frame.render_widget(title_paragraph, chunks[0]);
+
+    // コンテンツエリア
+    let visible_height = chunks[1].height.saturating_sub(2) as usize;
+    let content_lines: Vec<Line> = app
+        .preview_content
+        .iter()
+        .skip(app.preview_scroll)
+        .take(visible_height)
+        .map(|s| Line::from(s.as_str()))
+        .collect();
+
+    let content_paragraph = Paragraph::new(content_lines)
+        .style(Style::default().fg(Color::White))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Gray)),
+        )
+        .wrap(Wrap { trim: false });
+    frame.render_widget(content_paragraph, chunks[1]);
+
+    // スクロールバー（コンテンツが表示領域より多い場合）
+    if app.preview_content.len() > visible_height {
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"))
+            .track_symbol(Some("│"))
+            .thumb_symbol("█");
+
+        let mut scrollbar_state = ScrollbarState::new(app.preview_content.len())
+            .position(app.preview_scroll)
+            .viewport_content_length(visible_height);
+
+        let scrollbar_area = Rect {
+            x: chunks[1].x + chunks[1].width - 1,
+            y: chunks[1].y + 1,
+            width: 1,
+            height: chunks[1].height.saturating_sub(2),
+        };
+
+        frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+    }
+
+    // フッター（ヘルプ）
+    let scroll_info = format!(
+        " Line {}/{} ",
+        app.preview_scroll + 1,
+        app.preview_content.len().max(1)
+    );
+    let help_text = "Esc/p/q:Close  j/k:Scroll  PgUp/Dn  ^u/d:Half  g/G:Top/End  o:Open";
+    
+    let footer = Paragraph::new(format!("{}{}", help_text, scroll_info))
+        .style(Style::default().fg(Color::DarkGray))
+        .block(Block::default().borders(Borders::ALL));
+    frame.render_widget(footer, chunks[2]);
 }
