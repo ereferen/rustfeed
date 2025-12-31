@@ -5,10 +5,21 @@
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{prelude::*, Terminal};
-use rustfeed_core::{config::AppConfig, db::Database, Article, Feed};
+use rustfeed_core::{config::AppConfig, db::Database, feed, Article, Feed};
 use std::time::Duration;
+use tokio::sync::mpsc;
 
 use crate::ui;
+
+/// フィード更新の結果を表すメッセージ
+pub enum FetchMessage {
+    /// 更新開始（フィード名）
+    Started(String),
+    /// 1つのフィード更新完了（フィード名, 新規記事数, エラーメッセージ）
+    FeedDone(String, usize, Option<String>),
+    /// 全フィード更新完了（合計新規記事数）
+    AllDone(usize),
+}
 
 /// アプリケーションのフォーカス状態
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +62,14 @@ pub struct App {
     pub preview_content: Vec<String>,
     /// プレビュー画面の表示可能行数
     pub preview_height: u16,
+    /// フィード更新中フラグ
+    pub is_fetching: bool,
+    /// フィード更新メッセージ受信用チャンネル
+    pub fetch_rx: Option<mpsc::Receiver<FetchMessage>>,
+    /// 現在更新中のフィード名
+    pub fetching_feed: Option<String>,
+    /// 更新進捗（完了数/全体数）
+    pub fetch_progress: (usize, usize),
 }
 
 impl App {
@@ -79,6 +98,10 @@ impl App {
             preview_scroll: 0,
             preview_content: Vec::new(),
             preview_height: 10,       // 初期値、UIで更新される
+            is_fetching: false,
+            fetch_rx: None,
+            fetching_feed: None,
+            fetch_progress: (0, 0),
         })
     }
 
@@ -87,6 +110,9 @@ impl App {
         loop {
             // 画面を描画（リスト高さの更新のため可変参照）
             terminal.draw(|frame| ui::render(frame, self))?;
+
+            // フェッチメッセージを処理（非ブロッキング）
+            self.process_fetch_messages()?;
 
             // イベントをポーリング（100msタイムアウト）
             if event::poll(Duration::from_millis(100))? {
@@ -203,8 +229,7 @@ impl App {
 
             // フィード更新
             KeyCode::Char('R') => {
-                self.status_message = Some("Refreshing feeds...".to_string());
-                // TODO: 非同期でフィード更新を実装
+                self.start_fetch();
             }
 
             // 記事をブラウザで開く
@@ -533,5 +558,124 @@ impl App {
         let visible_height = self.preview_height.saturating_sub(4) as usize;
         let max_scroll = self.preview_content.len().saturating_sub(visible_height);
         self.preview_scroll = (self.preview_scroll + lines).min(max_scroll);
+    }
+
+
+    /// フィード更新を開始（バックグラウンドで実行）
+    fn start_fetch(&mut self) {
+        if self.is_fetching {
+            self.status_message = Some("Already fetching...".to_string());
+            return;
+        }
+
+        let feeds = self.feeds.clone();
+        if feeds.is_empty() {
+            self.status_message = Some("No feeds to fetch".to_string());
+            return;
+        }
+
+        // チャンネルを作成
+        let (tx, rx) = mpsc::channel::<FetchMessage>(32);
+        self.fetch_rx = Some(rx);
+        self.is_fetching = true;
+        self.fetch_progress = (0, feeds.len());
+        self.status_message = Some("Starting fetch...".to_string());
+
+        // バックグラウンドタスクを起動
+        tokio::spawn(async move {
+            // バックグラウンドタスク用のDB接続を作成
+            let db = match Database::new() {
+                Ok(d) => d,
+                Err(_) => return,
+            };
+
+            let mut total_new = 0;
+
+            for stored_feed in feeds {
+                let feed_name = stored_feed.display_name().to_string();
+                
+                // 更新開始を通知
+                let _ = tx.send(FetchMessage::Started(feed_name.clone())).await;
+
+                // フィードを取得
+                match feed::fetch_feed(&stored_feed.url).await {
+                    Ok((_feed_info, articles)) => {
+                        let mut new_count = 0;
+
+                        for mut article in articles {
+                            article.feed_id = stored_feed.id;
+                            if let Ok(Some(_)) = db.add_article(&article) {
+                                new_count += 1;
+                            }
+                        }
+
+                        total_new += new_count;
+                        let _ = tx.send(FetchMessage::FeedDone(feed_name, new_count, None)).await;
+                    }
+                    Err(e) => {
+                        let _ = tx.send(FetchMessage::FeedDone(
+                            feed_name,
+                            0,
+                            Some(e.to_string()),
+                        )).await;
+                    }
+                }
+            }
+
+            // 全完了を通知
+            let _ = tx.send(FetchMessage::AllDone(total_new)).await;
+        });
+    }
+
+    /// フェッチメッセージを処理（非ブロッキング）
+    fn process_fetch_messages(&mut self) -> Result<()> {
+        // fetch_rxがNoneならすぐに戻る
+        let rx = match &mut self.fetch_rx {
+            Some(rx) => rx,
+            None => return Ok(()),
+        };
+
+        // メッセージを収集（借用を解放するため）
+        let mut messages = Vec::new();
+        while let Ok(msg) = rx.try_recv() {
+            messages.push(msg);
+        }
+
+        // 収集したメッセージを処理
+        for msg in messages {
+            match msg {
+                FetchMessage::Started(name) => {
+                    self.fetching_feed = Some(name.clone());
+                    self.status_message = Some(format!("Fetching {}...", name));
+                }
+                FetchMessage::FeedDone(name, new_count, error) => {
+                    self.fetch_progress.0 += 1;
+                    if let Some(err) = error {
+                        self.status_message = Some(format!("{}: Error - {}", name, err));
+                    } else {
+                        self.status_message = Some(format!(
+                            "{}: {} new ({}/{})",
+                            name,
+                            new_count,
+                            self.fetch_progress.0,
+                            self.fetch_progress.1
+                        ));
+                    }
+                }
+                FetchMessage::AllDone(total_new) => {
+                    self.is_fetching = false;
+                    self.fetching_feed = None;
+                    self.fetch_rx = None;
+                    self.status_message = Some(format!(
+                        "Fetch complete! {} new articles",
+                        total_new
+                    ));
+                    // フィードと記事を再読み込み
+                    self.feeds = self.db.get_feeds(None)?;
+                    self.load_articles_for_selected_feed()?;
+                }
+            }
+        }
+        Ok(())
     }
 }

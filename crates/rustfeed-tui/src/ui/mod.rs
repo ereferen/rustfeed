@@ -222,16 +222,33 @@ fn render_articles(frame: &mut Frame, app: &App, area: Rect) {
 
 /// フッター（ヘルプ）を描画
 fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let help_text = "q:Quit j/k:Move g/G:Top/End ^u/d:Half Tab:Switch r:Read f:Fav o:Open p:Preview";
+    let help_text = "q:Quit j/k:Move g/G:Top/End Tab:Switch r:Read f:Fav o:Open p:Preview R:Refresh";
 
-    let status = if let Some(msg) = &app.status_message {
+    // 更新中の場合は進捗を表示
+    let status = if app.is_fetching {
+        format!(
+            " | Fetching [{}/{}]{}",
+            app.fetch_progress.0,
+            app.fetch_progress.1,
+            app.fetching_feed
+                .as_ref()
+                .map(|f| format!(" {}", f))
+                .unwrap_or_default()
+        )
+    } else if let Some(msg) = &app.status_message {
         format!(" | {}", msg)
     } else {
         String::new()
     };
 
+    let status_style = if app.is_fetching {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+
     let footer = Paragraph::new(format!("{}{}", help_text, status))
-        .style(Style::default().fg(Color::DarkGray))
+        .style(status_style)
         .block(Block::default().borders(Borders::ALL));
 
     frame.render_widget(footer, area);
