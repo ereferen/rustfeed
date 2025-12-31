@@ -133,6 +133,30 @@ fn render_feeds(frame: &mut Frame, app: &App, area: Rect) {
 
 /// 記事一覧を描画
 fn render_articles(frame: &mut Frame, app: &App, area: Rect) {
+    // 検索モード時は上部に検索入力欄を表示
+    let (search_area, list_area) = if app.search_mode {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(0)])
+            .split(area);
+        (Some(chunks[0]), chunks[1])
+    } else {
+        (None, area)
+    };
+
+    // 検索入力欄を描画
+    if let Some(search_area) = search_area {
+        let search_input = Paragraph::new(format!("/{}", app.search_query))
+            .style(Style::default().fg(Color::Yellow))
+            .block(
+                Block::default()
+                    .title(" Search ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Yellow)),
+            );
+        frame.render_widget(search_input, search_area);
+    }
+
     let items: Vec<ListItem> = app
         .articles
         .iter()
@@ -168,7 +192,10 @@ fn render_articles(frame: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(Color::Gray)
     };
 
-    let title = if app.feeds.is_empty() {
+    // タイトルを決定（検索中は検索クエリを表示）
+    let title = if app.search_active {
+        format!(" Search: '{}' ({} results) ", app.search_query, app.articles.len())
+    } else if app.feeds.is_empty() {
         " Articles ".to_string()
     } else if let Some(feed) = app.feeds.get(app.selected_feed) {
         format!(" {} ", feed.display_name())
@@ -193,10 +220,10 @@ fn render_articles(frame: &mut Frame, app: &App, area: Rect) {
     let mut state = ListState::default();
     state.select(Some(app.selected_article));
 
-    frame.render_stateful_widget(articles_list, area, &mut state);
+    frame.render_stateful_widget(articles_list, list_area, &mut state);
 
     // スクロールバーを描画（アイテムが表示領域より多い場合のみ）
-    let visible_height = area.height.saturating_sub(2) as usize; // ボーダー分を引く
+    let visible_height = list_area.height.saturating_sub(2) as usize; // ボーダー分を引く
     if app.articles.len() > visible_height {
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(Some("↑"))
@@ -210,10 +237,10 @@ fn render_articles(frame: &mut Frame, app: &App, area: Rect) {
 
         // スクロールバーの描画領域（ボーダーの内側）
         let scrollbar_area = Rect {
-            x: area.x + area.width - 1,
-            y: area.y + 1,
+            x: list_area.x + list_area.width - 1,
+            y: list_area.y + 1,
             width: 1,
-            height: area.height.saturating_sub(2),
+            height: list_area.height.saturating_sub(2),
         };
 
         frame.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);

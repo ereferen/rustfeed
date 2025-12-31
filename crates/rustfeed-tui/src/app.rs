@@ -70,6 +70,12 @@ pub struct App {
     pub fetching_feed: Option<String>,
     /// 更新進捗（完了数/全体数）
     pub fetch_progress: (usize, usize),
+    /// 検索モードが有効かどうか
+    pub search_mode: bool,
+    /// 検索クエリ（入力中）
+    pub search_query: String,
+    /// 検索が有効かどうか（検索結果を表示中）
+    pub search_active: bool,
 }
 
 impl App {
@@ -102,6 +108,9 @@ impl App {
             fetch_rx: None,
             fetching_feed: None,
             fetch_progress: (0, 0),
+            search_mode: false,
+            search_query: String::new(),
+            search_active: false,
         })
     }
 
@@ -143,6 +152,11 @@ impl App {
 
     /// キー入力を処理
     async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) -> Result<()> {
+        // 検索モード時は専用のキー処理
+        if self.search_mode {
+            return self.handle_search_key(key);
+        }
+
         // プレビューモード時は専用のキー処理
         if self.show_preview {
             return self.handle_preview_key(key, modifiers);
@@ -195,12 +209,21 @@ impl App {
             // 左右でフォーカス切り替え
             KeyCode::Left | KeyCode::Char('h') => {
                 self.focus = Focus::Feeds;
+                // 検索をクリア
+                if self.search_active {
+                    self.clear_search()?;
+                }
                 self.status_message = Some("Feeds".to_string());
             }
             KeyCode::Right | KeyCode::Char('l') | KeyCode::Enter => {
                 if self.focus == Focus::Feeds && !self.feeds.is_empty() {
                     self.focus = Focus::Articles;
-                    self.load_articles_for_selected_feed()?;
+                    // 検索をクリア
+                    if self.search_active {
+                        self.clear_search()?;
+                    } else {
+                        self.load_articles_for_selected_feed()?;
+                    }
                     self.status_message = Some("Articles".to_string());
                 }
             }
@@ -243,6 +266,18 @@ impl App {
             KeyCode::Char('p') => {
                 if self.focus == Focus::Articles && !self.articles.is_empty() {
                     self.open_preview();
+                }
+            }
+
+            // 検索モード開始
+            KeyCode::Char('/') => {
+                self.start_search();
+            }
+
+            // 検索クリア
+            KeyCode::Esc => {
+                if self.search_active {
+                    self.clear_search()?;
                 }
             }
 
@@ -676,6 +711,76 @@ impl App {
                 }
             }
         }
+        Ok(())
+    }
+
+
+    /// 検索モードを開始
+    fn start_search(&mut self) {
+        self.search_mode = true;
+        self.search_query.clear();
+        self.focus = Focus::Articles;
+    }
+
+    /// 検索モード時のキー処理
+    fn handle_search_key(&mut self, key: KeyCode) -> Result<()> {
+        match key {
+            // 検索実行
+            KeyCode::Enter => {
+                if !self.search_query.is_empty() {
+                    self.execute_search()?;
+                }
+                self.search_mode = false;
+            }
+
+            // 検索キャンセル
+            KeyCode::Esc => {
+                self.search_mode = false;
+                self.search_query.clear();
+            }
+
+            // 文字入力
+            KeyCode::Char(c) => {
+                self.search_query.push(c);
+            }
+
+            // バックスペース
+            KeyCode::Backspace => {
+                self.search_query.pop();
+            }
+
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// 検索を実行
+    fn execute_search(&mut self) -> Result<()> {
+        // 全フィードから検索（フィルタとして検索クエリを使用）
+        self.articles = self.db.get_articles(
+            false,  // unread_only
+            100,    // limit（検索結果は多めに）
+            Some(&self.search_query),  // filter
+            None,   // feed_id（全フィード対象）
+        )?;
+
+        self.search_active = true;
+        self.selected_article = 0;
+        self.status_message = Some(format!(
+            "Search: '{}' ({} results)",
+            self.search_query,
+            self.articles.len()
+        ));
+
+        Ok(())
+    }
+
+    /// 検索をクリア
+    fn clear_search(&mut self) -> Result<()> {
+        self.search_active = false;
+        self.search_query.clear();
+        self.load_articles_for_selected_feed()?;
+        self.status_message = Some("Search cleared".to_string());
         Ok(())
     }
 }
