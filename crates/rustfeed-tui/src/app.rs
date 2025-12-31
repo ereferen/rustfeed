@@ -335,8 +335,14 @@ impl App {
     /// 選択中のフィードの記事を読み込む
     fn load_articles_for_selected_feed(&mut self) -> Result<()> {
         if let Some(feed) = self.feeds.get(self.selected_feed) {
+            let previous_selected = self.selected_article;
             self.articles = self.db.get_articles(false, 50, None, Some(feed.id))?;
-            self.selected_article = 0;
+            // 選択位置を保持（記事数が減った場合は調整）
+            if self.articles.is_empty() {
+                self.selected_article = 0;
+            } else {
+                self.selected_article = previous_selected.min(self.articles.len() - 1);
+            }
         }
         Ok(())
     }
