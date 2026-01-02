@@ -31,6 +31,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use feed_rs::parser;
 
+use crate::db::Database;
 use crate::models::{Article, Feed};
 
 // =============================================================================
@@ -179,6 +180,53 @@ pub async fn fetch_feed(url: &str) -> Result<(Feed, Vec<Article>)> {
     // タプルで返す
     // Rust ではタプルを使って複数の値を返すことができる
     Ok((feed, articles))
+}
+
+/// パースしたフィードの記事をデータベースに保存する
+///
+/// # 引数
+///
+/// * `db` - データベース接続への参照
+/// * `feed_id` - 記事を関連付けるフィードのID
+/// * `feed_data` - `fetch_feed`から返されたタプル (Feed, Vec<Article>)
+///
+/// # 戻り値
+///
+/// 新規追加された記事の数
+///
+/// # 使用例
+///
+/// ```rust,no_run
+/// use rustfeed_core::{db::Database, feed::{fetch_feed, save_articles}};
+///
+/// async fn update_feed(db: &Database, feed_id: i64, url: &str) -> anyhow::Result<usize> {
+///     let feed_data = fetch_feed(url).await?;
+///     let count = save_articles(db, feed_id, &feed_data)?;
+///     Ok(count)
+/// }
+/// ```
+pub fn save_articles(
+    db: &Database,
+    feed_id: i64,
+    feed_data: &(Feed, Vec<Article>),
+) -> Result<usize> {
+    let (_, articles) = feed_data;
+    let mut count = 0;
+
+    for article in articles {
+        // feed_id を設定して記事を作成
+        let article_with_feed_id = Article {
+            feed_id,
+            ..article.clone()
+        };
+
+        // 記事をデータベースに追加（重複は無視される）
+        if let Some(_id) = db.add_article(&article_with_feed_id)? {
+            count += 1;
+        }
+    }
+
+    Ok(count)
 }
 
 // =============================================================================

@@ -94,6 +94,15 @@ impl Database {
         Ok(Self { conn })
     }
 
+    /// データベースを開いて初期化する（Tauriなどで便利なヘルパー）
+    ///
+    /// `new()` と `init()` を一度に実行します。
+    pub fn open() -> Result<Self> {
+        let db = Self::new()?;
+        db.init()?;
+        Ok(db)
+    }
+
     /// データベースファイルのパスを取得する（プライベート関数）
     ///
     /// # 戻り値
@@ -459,6 +468,68 @@ impl Database {
             params![priority, feed_id],
         )?;
         Ok(())
+    }
+
+    /// URLとタイトルで新しいフィードを追加する（GUI用の簡易メソッド）
+    ///
+    /// # 引数
+    /// * `url` - フィードのURL
+    /// * `title` - フィードのタイトル
+    ///
+    /// # 戻り値
+    /// 追加されたフィード
+    pub fn add_feed_simple(&self, url: &str, title: &str) -> Result<Feed> {
+        let now = Utc::now();
+        let feed = Feed {
+            id: 0, // 自動採番
+            url: url.to_string(),
+            title: title.to_string(),
+            description: None,
+            created_at: now,
+            updated_at: now,
+            custom_name: None,
+            category: None,
+            priority: 0,
+        };
+        let id = self.add_feed(&feed)?;
+        Ok(Feed { id, ..feed })
+    }
+
+    /// お気に入りを切り替える
+    ///
+    /// # 引数
+    /// * `id` - 記事のID
+    ///
+    /// # 戻り値
+    /// 切り替え後のお気に入り状態（true = お気に入り）
+    pub fn toggle_favorite(&self, id: i64) -> Result<bool> {
+        // 現在の状態を取得
+        let current: i32 = self.conn.query_row(
+            "SELECT is_favorite FROM articles WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+
+        let new_value = if current == 0 { 1 } else { 0 };
+
+        self.conn.execute(
+            "UPDATE articles SET is_favorite = ?1 WHERE id = ?2",
+            params![new_value, id],
+        )?;
+
+        Ok(new_value == 1)
+    }
+
+    /// 記事を検索する
+    ///
+    /// # 引数
+    /// * `query` - 検索クエリ
+    /// * `limit` - 取得する最大件数
+    ///
+    /// # 戻り値
+    /// 検索結果の記事一覧
+    pub fn search_articles(&self, query: &str, limit: i64) -> Result<Vec<Article>> {
+        self.get_articles(false, limit as usize, Some(query), None)
     }
 
     // =========================================================================

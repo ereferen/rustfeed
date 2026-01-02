@@ -4,6 +4,7 @@ members = [
     "crates/rustfeed-core",
     "crates/rustfeed-cli",
     "crates/rustfeed-tui",
+    "crates/rustfeed-tauri",
 ]
 
 [workspace.package]

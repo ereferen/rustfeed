@@ -1,0 +1,21 @@
+[package]
+name = "rustfeed-tauri"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+description = "Tauri backend for rustfeed GUI"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+rustfeed-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
