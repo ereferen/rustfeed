@@ -24,9 +24,9 @@ rustfeed is a command-line RSS feed reader designed to help you efficiently coll
 - [x] Read management (batch mark, toggle)
 - [x] Article search with date range filtering
 
-### Phase 3
-- [ ] TUI (Terminal UI)
-- [ ] Tauri GUI (optional)
+### Phase 3 (In Progress)
+- [x] TUI (Terminal UI)
+- [x] Tauri GUI
 
 ## Installation
 
@@ -35,12 +35,45 @@ rustfeed is a command-line RSS feed reader designed to help you efficiently coll
 git clone https://github.com/ereferen/rustfeed.git
 cd rustfeed
 
-# Build
-cargo build --release
+# Build CLI
+cargo build --release -p rustfeed-cli
 
-# Run
-cargo run
+# Build TUI
+cargo build --release -p rustfeed-tui
+
+# Run CLI
+cargo run --bin rustfeed-cli
+
+# Run TUI
+cargo run --bin rustfeed-tui
 ```
+
+### GUI (Tauri + React)
+
+The GUI requires additional dependencies:
+
+```bash
+# Install Tauri CLI
+cargo install tauri-cli
+
+# Install frontend dependencies
+cd apps/rustfeed-gui
+npm install
+
+# Run in development mode
+cargo tauri dev
+
+# Build for production
+cargo tauri build
+```
+
+**System Requirements for GUI:**
+- Node.js 18+
+- Rust 1.70+
+- Platform-specific dependencies:
+  - **Linux**: `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`
+  - **macOS**: Xcode Command Line Tools
+  - **Windows**: Microsoft Visual Studio C++ Build Tools
 
 ## Usage
 
