@@ -22,17 +22,17 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
             suffix: linux-x64
-          - os: macos-latest
-            target: x86_64-apple-darwin
+            ext: ''
+          - os: macos-13
             suffix: macos-x64
+            ext: ''
           - os: macos-latest
-            target: aarch64-apple-darwin
             suffix: macos-arm64
+            ext: ''
           - os: windows-latest
-            target: x86_64-pc-windows-msvc
             suffix: windows-x64
+            ext: '.exe'
 
     steps:
       - name: Checkout
@@ -40,29 +40,28 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - name: Build CLI
-        run: cargo build --release --target ${{ matrix.target }} -p rustfeed-cli
+        run: cargo build --release -p rustfeed-cli
 
       - name: Build TUI
-        run: cargo build --release --target ${{ matrix.target }} -p rustfeed-tui
+        run: cargo build --release -p rustfeed-tui
 
       - name: Prepare artifacts (Unix)
         if: runner.os != 'Windows'
         run: |
           mkdir -p artifacts
-          cp target/${{ matrix.target }}/release/rustfeed-cli artifacts/rustfeed-cli-${{ matrix.suffix }}
-          cp target/${{ matrix.target }}/release/rustfeed-tui artifacts/rustfeed-tui-${{ matrix.suffix }}
+          cp target/release/rustfeed-cli artifacts/rustfeed-cli-${{ matrix.suffix }}
+          cp target/release/rustfeed-tui artifacts/rustfeed-tui-${{ matrix.suffix }}
           chmod +x artifacts/*
 
       - name: Prepare artifacts (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          mkdir artifacts
-          copy target\${{ matrix.target }}\release\rustfeed-cli.exe artifacts\rustfeed-cli-${{ matrix.suffix }}.exe
-          copy target\${{ matrix.target }}\release\rustfeed-tui.exe artifacts\rustfeed-tui-${{ matrix.suffix }}.exe
+          New-Item -ItemType Directory -Force -Path artifacts
+          Copy-Item target\release\rustfeed-cli.exe artifacts\rustfeed-cli-${{ matrix.suffix }}.exe
+          Copy-Item target\release\rustfeed-tui.exe artifacts\rustfeed-tui-${{ matrix.suffix }}.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -80,7 +79,7 @@ jobs:
           - os: ubuntu-latest
             suffix: linux-x64
           - os: macos-latest
-            suffix: macos-x64
+            suffix: macos-arm64
           - os: windows-latest
             suffix: windows-x64
 
@@ -106,13 +105,12 @@ jobs:
         working-directory: apps/rustfeed-gui
         run: npm ci
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
+
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: apps/rustfeed-gui
-          tauriScript: npx tauri
+        working-directory: crates/rustfeed-tauri
+        run: cargo tauri build
 
       - name: Upload artifacts (Linux)
         if: runner.os == 'Linux'
