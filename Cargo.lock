@@ -3553,7 +3553,7 @@ dependencies = [
 
 [[package]]
 name = "rustfeed-cli"
-version = "0.5.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3566,7 +3566,7 @@ dependencies = [
 
 [[package]]
 name = "rustfeed-core"
-version = "0.5.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3585,7 +3585,7 @@ dependencies = [
 
 [[package]]
 name = "rustfeed-tauri"
-version = "0.5.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "rustfeed-core",
@@ -3599,7 +3599,7 @@ dependencies = [
 
 [[package]]
 name = "rustfeed-tui"
-version = "0.5.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "chrono",
