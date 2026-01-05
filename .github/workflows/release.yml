@@ -23,16 +23,10 @@ jobs:
         include:
           - os: ubuntu-latest
             suffix: linux-x64
-            ext: ''
-          - os: macos-13
-            suffix: macos-x64
-            ext: ''
           - os: macos-latest
             suffix: macos-arm64
-            ext: ''
           - os: windows-latest
             suffix: windows-x64
-            ext: '.exe'
 
     steps:
       - name: Checkout
