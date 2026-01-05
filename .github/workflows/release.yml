@@ -51,7 +51,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p artifacts
-          cp target/release/rustfeed-cli artifacts/rustfeed-cli-${{ matrix.suffix }}
+          cp target/release/rustfeed artifacts/rustfeed-${{ matrix.suffix }}
           cp target/release/rustfeed-tui artifacts/rustfeed-tui-${{ matrix.suffix }}
           chmod +x artifacts/*
 
@@ -60,7 +60,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts
-          Copy-Item target\release\rustfeed-cli.exe artifacts\rustfeed-cli-${{ matrix.suffix }}.exe
+          Copy-Item target\release\rustfeed.exe artifacts\rustfeed-${{ matrix.suffix }}.exe
           Copy-Item target\release\rustfeed-tui.exe artifacts\rustfeed-tui-${{ matrix.suffix }}.exe
 
       - name: Upload artifacts
