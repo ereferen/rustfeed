@@ -28,9 +28,9 @@ jobs:
 
       - name: Build documentation
         run: |
-          cargo doc --no-deps --document-private-items
+          cargo doc --workspace --no-deps --document-private-items --exclude rustfeed-tauri
           # index.html がないとGitHub Pagesで404になるため、リダイレクトを作成
-          echo '<meta http-equiv="refresh" content="0; url=rustfeed/index.html">' > target/doc/index.html
+          echo '<meta http-equiv="refresh" content="0; url=rustfeed_core/index.html">' > target/doc/index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
