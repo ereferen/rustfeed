@@ -40,6 +40,16 @@ cargo run --bin rustfeed-cli -- articles --unread
 - [03-workflow.md](.claude/rules/03-workflow.md) - 開発ワークフロー
 - [04-architecture.md](.claude/rules/04-architecture.md) - アーキテクチャ方針
 
+## Claude Code Skills
+
+このプロジェクトには、Claude Code専用のSkillsが用意されています：
+
+- **rustfeed-architecture**: プロジェクト構造・アーキテクチャガイド
+- **rustfeed-quality**: コード品質チェック（fmt, clippy, test, doc）
+- **rustfeed-feed-ops**: フィード管理・記事操作コマンド
+
+詳細は [.claude/SKILLS.md](.claude/SKILLS.md) を参照してください。
+
 ## プロジェクト構成
 
 ```
