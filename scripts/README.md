@@ -193,7 +193,23 @@ sudo usermod -aG docker $USER
 # ログアウト後、再ログイン
 ```
 
-### 3. "ANTHROPIC_API_KEY not set"
+### 3. Claude Codeの認証について
+
+Claude Codeを使用するには、以下のいずれかの方法で認証します。
+
+#### 方法A: ブラウザでログイン（推奨・APIキー不要）
+
+1. コンテナ内でClaude Codeを起動
+   ```bash
+   make shell
+   claude-code
+   ```
+
+2. 表示されたURLをホスト側のブラウザで開く
+3. Anthropicアカウントでログイン
+4. 自動的に認証完了（次回以降はログイン不要）
+
+#### 方法B: APIキーを使用
 
 **原因**: .envファイルにAPI Keyが設定されていない
 

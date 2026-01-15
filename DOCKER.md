@@ -31,45 +31,58 @@ python3 scripts/validate-docker.py
 
 ## 手動セットアップ
 
-### 1. API Keyの設定
+### 1. Claude Codeの認証設定
 
-`.env`ファイルを作成し、Anthropic API Keyを設定します。
+Claude Codeを使用するには、以下のいずれかの方法で認証します。
 
-```bash
-cp .env.example .env
-```
+#### オプションA: ブラウザでログイン（推奨・APIキー不要）
 
-`.env`ファイルを編集して、API Keyを設定してください。
+APIキーを持っていない場合は、この方法を使用してください。
 
-```env
-ANTHROPIC_API_KEY=your_actual_api_key_here
-```
+1. コンテナを起動
+   ```bash
+   make setup  # .env作成（スキップ可）+ ビルド
+   make up     # コンテナ起動
+   make shell  # コンテナに接続
+   ```
+
+2. コンテナ内でClaude Codeを起動
+   ```bash
+   claude-code
+   ```
+
+3. 初回起動時、ログインURLが表示されます
+   ```
+   Please visit this URL to authenticate:
+   https://console.anthropic.com/...
+   ```
+
+4. **ホスト側のブラウザ**でURLを開き、Anthropicアカウントでログイン
+
+5. ログイン完了後、自動的にClaude Codeが使えるようになります
+
+**認証情報の永続化**: ログイン情報は `~/.config/claude-code` に保存され、Dockerボリュームとして永続化されます。次回以降はログイン不要です。
+
+#### オプションB: API Keyを使用
+
+API Keyを持っている場合は、環境変数で設定できます。
+
+1. `.env`ファイルを作成
+   ```bash
+   cp .env.example .env
+   ```
+
+2. `.env`ファイルを編集して、API Keyを設定
+   ```env
+   ANTHROPIC_API_KEY=your_actual_api_key_here
+   ```
+
+3. コンテナを起動
+   ```bash
+   make up
+   ```
 
 **重要**: `.env`ファイルは`.gitignore`に含まれているため、コミットされません。
-
-### 2. Dockerイメージのビルド
-
-```bash
-docker-compose build
-```
-
-初回ビルドは数分かかります。Rust環境とClaude Code CLIがインストールされます。
-
-### 3. コンテナの起動
-
-```bash
-docker-compose up -d
-```
-
-コンテナがバックグラウンドで起動します。
-
-### 4. コンテナに接続
-
-```bash
-docker-compose exec rustfeed-dev bash
-```
-
-これで、Docker環境内のシェルに接続できます。
 
 ## 使い方
 
@@ -96,14 +109,45 @@ cargo run --bin rustfeed-tui
 
 ### Claude Codeの使用
 
-コンテナ内でClaude Codeを起動します。
+#### 初回起動（ログイン）
+
+初めてClaude Codeを使用する場合、ブラウザでログインする必要があります。
 
 ```bash
-# Claude Code CLIの起動
+# コンテナに接続
+make shell
+
+# Claude Codeを起動
+claude-code
+```
+
+初回起動時、以下のようなログインURLが表示されます。
+
+```
+Please visit this URL to authenticate:
+https://console.anthropic.com/auth/...
+```
+
+このURLを**ホスト側のブラウザ**で開き、Anthropicアカウントでログインしてください。
+ログイン完了後、自動的にClaude Codeが使えるようになります。
+
+**注意**:
+- ログイン情報は永続化されるため、次回以降はログイン不要です
+- APIキーを設定している場合は、ログイン不要です
+
+#### 通常の使用
+
+ログイン後は、以下のように使用できます。
+
+```bash
+# Claude Code CLIの起動（対話モード）
 claude-code
 
 # 特定のプロンプトで起動
 claude-code "rustfeedのコードをレビューしてください"
+
+# またはMakefileから
+make claude
 ```
 
 ### データの永続化
