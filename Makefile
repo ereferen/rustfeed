@@ -1,20 +1,27 @@
-.PHONY: help setup build up down shell claude clean rebuild test fmt check
+.PHONY: help setup build up down shell claude clean rebuild test fmt check validate test-env
 
 # デフォルトターゲット
 help:
 	@echo "rustfeed Docker環境 - 利用可能なコマンド:"
 	@echo ""
+	@echo "セットアップ＆検証:"
+	@echo "  make validate   - Docker設定ファイルを検証"
+	@echo "  make test-env   - Docker環境の動作確認（自動テスト）"
 	@echo "  make setup      - 初回セットアップ（.env作成 + ビルド）"
+	@echo ""
+	@echo "コンテナ管理:"
 	@echo "  make build      - Dockerイメージをビルド"
 	@echo "  make up         - コンテナを起動"
 	@echo "  make down       - コンテナを停止"
 	@echo "  make shell      - コンテナにシェルで接続"
+	@echo "  make clean      - コンテナとボリュームを削除"
+	@echo "  make rebuild    - クリーン後に再ビルド"
+	@echo ""
+	@echo "開発ツール:"
 	@echo "  make claude     - Claude Codeを起動"
 	@echo "  make test       - テスト実行（コンテナ内）"
 	@echo "  make fmt        - コードフォーマット（コンテナ内）"
 	@echo "  make check      - コンパイルチェック（コンテナ内）"
-	@echo "  make clean      - コンテナとボリュームを削除"
-	@echo "  make rebuild    - クリーン後に再ビルド"
 	@echo ""
 
 # 初回セットアップ
@@ -71,3 +78,13 @@ clean:
 rebuild: clean
 	docker-compose build --no-cache
 	@echo "再ビルドが完了しました。"
+
+# Docker設定ファイルの検証
+validate:
+	@echo "Docker設定ファイルを検証しています..."
+	python3 scripts/validate-docker.py
+
+# Docker環境の動作確認
+test-env:
+	@echo "Docker環境の動作確認を開始します..."
+	bash scripts/test-docker-env.sh

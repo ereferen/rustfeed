@@ -39,19 +39,15 @@ Docker環境を使用すると、環境構築が簡単で、Claude Codeをすぐ
 git clone https://github.com/ereferen/rustfeed.git
 cd rustfeed
 
-# 初回セットアップ（.env作成とビルド）
-make setup
+# 【推奨】自動セットアップとテスト
+make validate   # 設定ファイル検証
+make test-env   # 環境の自動構築とテスト
 
-# .envファイルにANTHROPIC_API_KEYを設定してください
-
-# コンテナを起動
-make up
-
-# コンテナに接続
-make shell
-
-# Claude Codeを起動
-make claude
+# または手動セットアップ
+make setup      # .env作成 + ビルド
+make up         # コンテナ起動
+make shell      # コンテナに接続
+make claude     # Claude Code起動
 ```
 
 詳細は [DOCKER.md](./DOCKER.md) を参照してください。

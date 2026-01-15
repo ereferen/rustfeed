@@ -8,7 +8,28 @@
 - Docker Compose
 - Anthropic API Key
 
-## 初期セットアップ
+## クイックスタート（自動セットアップ）
+
+最も簡単な方法は、テストスクリプトを使用することです。
+
+```bash
+# 設定ファイルの検証
+python3 scripts/validate-docker.py
+
+# Docker環境のビルドとテスト（自動）
+./scripts/test-docker-env.sh
+```
+
+テストスクリプトが以下を自動で実行します：
+- 前提条件のチェック
+- .envファイルの作成（存在しない場合）
+- Dockerイメージのビルド
+- コンテナの起動
+- 環境の動作確認
+
+詳細は [scripts/README.md](./scripts/README.md) を参照してください。
+
+## 手動セットアップ
 
 ### 1. API Keyの設定
 
