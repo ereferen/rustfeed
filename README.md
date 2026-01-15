@@ -6,6 +6,10 @@ A CLI RSS reader written in Rust.
 
 rustfeed is a command-line RSS feed reader designed to help you efficiently collect and manage information from multiple sources.
 
+## Quick Start
+
+**初めての方はこちら**: [クイックスタートガイド](./QUICKSTART.md) - Docker環境で5分でセットアップ（APIキー不要）
+
 ## Features
 
 ### Phase 1 (MVP) ✅
@@ -29,6 +33,32 @@ rustfeed is a command-line RSS feed reader designed to help you efficiently coll
 - [x] Tauri GUI
 
 ## Installation
+
+### Option 1: Docker (Recommended for Development with Claude Code)
+
+Docker環境を使用すると、環境構築が簡単で、Claude Codeをすぐに使い始められます。
+
+**APIキー不要**: ブラウザでログインするだけでClaude Codeを使用できます。
+
+```bash
+# Clone the repository
+git clone https://github.com/ereferen/rustfeed.git
+cd rustfeed
+
+# 【推奨】自動セットアップとテスト
+make validate   # 設定ファイル検証
+make test-env   # 環境の自動構築とテスト
+
+# または手動セットアップ
+make setup      # .env作成 + ビルド（APIキーなしでもOK）
+make up         # コンテナ起動
+make shell      # コンテナに接続
+make claude     # Claude Code起動 → 初回はブラウザでログイン
+```
+
+詳細は [DOCKER.md](./DOCKER.md) を参照してください。
+
+### Option 2: Local Installation
 
 ```bash
 # Clone the repository

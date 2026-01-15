@@ -1,0 +1,48 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Git
+.git/
+.gitignore
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 環境変数
+.env
+.env.local
+
+# ログ
+*.log
+
+# データベース（開発時のものは含めない）
+*.db
+*.db-shm
+*.db-wal
+
+# ドキュメント（必要に応じて調整）
+docs/
+*.md
+!CLAUDE.md
+
+# テストデータ
+test_data/
+
+# Serena MCP
+.serena/
