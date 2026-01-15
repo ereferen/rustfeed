@@ -6,6 +6,10 @@ A CLI RSS reader written in Rust.
 
 rustfeed is a command-line RSS feed reader designed to help you efficiently collect and manage information from multiple sources.
 
+## Quick Start
+
+**初めての方はこちら**: [クイックスタートガイド](./QUICKSTART.md) - Docker環境で5分でセットアップ（APIキー不要）
+
 ## Features
 
 ### Phase 1 (MVP) ✅
