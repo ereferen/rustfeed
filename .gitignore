@@ -3,3 +3,7 @@
 # Claude Code個人設定（Git管理しない）
 CLAUDE.local.md
 .claude/settings.local.json
+
+# 環境変数ファイル（API Keyなど）
+.env
+.env.local

@@ -30,6 +30,34 @@ rustfeed is a command-line RSS feed reader designed to help you efficiently coll
 
 ## Installation
 
+### Option 1: Docker (Recommended for Development with Claude Code)
+
+Docker環境を使用すると、環境構築が簡単で、Claude Codeをすぐに使い始められます。
+
+```bash
+# Clone the repository
+git clone https://github.com/ereferen/rustfeed.git
+cd rustfeed
+
+# 初回セットアップ（.env作成とビルド）
+make setup
+
+# .envファイルにANTHROPIC_API_KEYを設定してください
+
+# コンテナを起動
+make up
+
+# コンテナに接続
+make shell
+
+# Claude Codeを起動
+make claude
+```
+
+詳細は [DOCKER.md](./DOCKER.md) を参照してください。
+
+### Option 2: Local Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/ereferen/rustfeed.git

@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  rustfeed-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rustfeed-dev
+    volumes:
+      # プロジェクトファイルをマウント
+      - .:/workspace
+      # Cargoのキャッシュを永続化（ビルド高速化）
+      - cargo-cache:/usr/local/cargo/registry
+      - cargo-git-cache:/usr/local/cargo/git
+      # ビルド成果物を永続化
+      - target-cache:/workspace/target
+      # rustfeedのデータディレクトリをマウント
+      - rustfeed-data:/home/rustfeed/.rustfeed
+      # Claude Code設定をマウント（オプション）
+      - claude-config:/home/rustfeed/.config/claude-code
+    environment:
+      # Rust関連
+      - RUST_BACKTRACE=1
+      - CARGO_HOME=/usr/local/cargo
+      # Claude Code API Key（.envファイルから読み込む）
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    working_dir: /workspace
+    # コンテナを起動したままにする
+    tty: true
+    stdin_open: true
+    # ネットワーク設定（フィード取得のため）
+    network_mode: bridge
+
+volumes:
+  # Cargoキャッシュボリューム
+  cargo-cache:
+  cargo-git-cache:
+  # ビルドキャッシュボリューム
+  target-cache:
+  # アプリケーションデータボリューム
+  rustfeed-data:
+  # Claude Code設定ボリューム
+  claude-config:
